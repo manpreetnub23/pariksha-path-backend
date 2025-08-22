@@ -1,7 +1,7 @@
 from beanie import Document
 from pydantic import EmailStr, Field
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -40,16 +40,12 @@ class User(Document):
     has_premium_access: bool = False
 
     # Timestamps
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(datetime.timezone.utc)
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(datetime.timezone.utc)
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_login: Optional[datetime] = None
 
     class Settings:
         name = "users"
 
     def update_timestamp(self):
-        self.updated_at = datetime.now(datetime.timezone.utc)
+        self.updated_at = datetime.now(timezone.utc)

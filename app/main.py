@@ -1,9 +1,13 @@
+from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from contextlib import asynccontextmanager
+
+from pydantic import BaseModel
 from .db import init_db
 import uvicorn
+from .models.user import User, UserRole, ExamCategory
 
 
 # Security
@@ -109,6 +113,69 @@ async def admin_dashboard():
     """Admin dashboard data"""
     # TODO: Implement admin dashboard
     return {"message": "Admin dashboard endpoint - to be implemented"}
+
+
+# Dev only
+
+
+class UserCreateRequest(BaseModel):
+    name: str
+    email: str
+    phone: str
+    password_hash: str
+    role: UserRole = UserRole.STUDENT
+    is_active: bool = True
+    is_verified: bool = False
+    enrolled_courses: List[str] = []
+    preferred_exam_categories: List[ExamCategory] = []
+    purchased_test_series: List[str] = []
+    has_premium_access: bool = False
+
+
+class UserUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None
+    is_verified: Optional[bool] = None
+    enrolled_courses: Optional[List[str]] = None
+    preferred_exam_categories: Optional[List[ExamCategory]] = None
+    purchased_test_series: Optional[List[str]] = None
+    has_premium_access: Optional[bool] = None
+
+
+# ___Development Routes____
+
+
+@app.post("/api/v1/dev/create_user")
+async def create_user(user_data: UserCreateRequest):
+    """Create a new user"""
+    try:
+        existing_user = await User.find_one({"email": user_data.email})
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User with this email already exists",
+            )
+        new_user = User(**user_data.model_dump())
+        await new_user.insert()
+        return {
+            "message": "User created successfully",
+            "user_id": str(new_user.id),
+            "user": {
+                "id": str(new_user.id),
+                "name": new_user.name,
+                "email": new_user.email,
+                "role": new_user.role,
+                "created_at": new_user.created_at,
+            },
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating user: {str(e)}",
+        )
 
 
 if __name__ == "__main__":
