@@ -1,13 +1,14 @@
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPBearer
 from contextlib import asynccontextmanager
 
 from pydantic import BaseModel
 from .db import init_db
 import uvicorn
 from .models.user import User, UserRole, ExamCategory
+from .routers.auth import router as auth_router, get_current_user
 
 
 # Security
@@ -24,8 +25,8 @@ async def lifespan(app: FastAPI):
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Coaching Institute API",
-    description="Backend API for Coaching Website & Exam Portal",
+    title="Pariksha Path API",
+    description="Backend API for Pariksha Path",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -39,8 +40,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include authentication routes
+app.include_router(auth_router)
 
-# Health check endpoint
+
+# Health check endpoints
 @app.get("/")
 async def root():
     return {"message": "Coaching Institute API is running!", "status": "healthy"}
@@ -51,73 +55,51 @@ async def health_check():
     return {"status": "healthy", "service": "coaching-api"}
 
 
-# Authentication dependency (placeholder for now)
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-):
-    """
-    Placeholder for JWT authentication
-    Will be implemented when we add authentication routes
-    """
-    # TODO: Implement JWT token verification
-    pass
-
-
 # API Routes Groups
 @app.get("/api/v1/test")
 async def test_endpoint():
     return {"message": "API v1 is working!"}
 
 
-# User management routes (placeholder structure)
-@app.post("/api/v1/auth/register")
-async def register_user():
-    """User registration endpoint"""
-    # TODO: Implement user registration
-    return {"message": "Registration endpoint - to be implemented"}
-
-
-@app.post("/api/v1/auth/login")
-async def login_user():
-    """User login endpoint"""
-    # TODO: Implement user login with JWT
-    return {"message": "Login endpoint - to be implemented"}
-
-
-@app.get("/api/v1/auth/me")
-async def get_current_user_info():
-    """Get current user profile"""
-    # TODO: Implement get current user
-    return {"message": "User profile endpoint - to be implemented"}
-
-
-# Course routes (placeholder)
+# Course routes (placeholder) - Protected
 @app.get("/api/v1/courses")
-async def get_courses():
+async def get_courses(current_user: User = Depends(get_current_user)):
     """Get all available courses"""
     # TODO: Implement courses listing
-    return {"message": "Courses endpoint - to be implemented"}
+    return {
+        "message": "Courses endpoint - to be implemented",
+        "user": current_user.name,
+    }
 
 
-# Mock test routes (placeholder)
+# Mock test routes (placeholder) - Protected
 @app.get("/api/v1/tests")
-async def get_mock_tests():
+async def get_mock_tests(current_user: User = Depends(get_current_user)):
     """Get available mock tests"""
     # TODO: Implement mock tests listing
-    return {"message": "Mock tests endpoint - to be implemented"}
+    return {
+        "message": "Mock tests endpoint - to be implemented",
+        "user": current_user.name,
+    }
 
 
-# Admin routes (placeholder)
+# Admin routes (placeholder) - Admin only
 @app.get("/api/v1/admin/dashboard")
-async def admin_dashboard():
+async def admin_dashboard(current_user: User = Depends(get_current_user)):
     """Admin dashboard data"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
+
     # TODO: Implement admin dashboard
-    return {"message": "Admin dashboard endpoint - to be implemented"}
+    return {
+        "message": "Admin dashboard endpoint - to be implemented",
+        "admin": current_user.name,
+    }
 
 
-# Dev only
-
-
+# Development Routes (keep for now, remove in production)
 class UserCreateRequest(BaseModel):
     name: str
     email: str
@@ -145,12 +127,9 @@ class UserUpdateRequest(BaseModel):
     has_premium_access: Optional[bool] = None
 
 
-# ___Development Routes____
-
-
 @app.post("/api/v1/dev/create_user")
 async def create_user(user_data: UserCreateRequest):
-    """Create a new user"""
+    """Create a new user (Development only)"""
     try:
         existing_user = await User.find_one({"email": user_data.email})
         if existing_user:
