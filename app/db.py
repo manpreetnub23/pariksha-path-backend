@@ -1,0 +1,34 @@
+import motor.motor_asyncio
+from beanie import init_beanie
+from .models.user import User
+from .config import settings
+from urllib.parse import urlparse
+
+
+async def init_db():
+    try:
+        # create motor client using MONGO_URI from settings
+        client = motor.motor_asyncio.AsyncIOMotorClient(settings.MONGO_URI)
+
+        # Test the connection
+        await client.admin.command("ping")
+        print("✅ Database connection successful! MongoDB is connected.")
+
+        # Extract database name from MONGO_URI
+        parsed_uri = urlparse(settings.MONGO_URI)
+        db_name = parsed_uri.path.lstrip("/")  # Remove leading slash
+
+        # If no database name in URI, use default
+        if not db_name:
+            db_name = "pariksha_path_db"
+            print(f"⚠️  No database name found in MONGO_URI, using default: {db_name}")
+
+        print(f"📁 Using database: {db_name}")
+        db = client.get_database(db_name)
+
+        await init_beanie(database=db, document_models=[User])
+        print("✅ Beanie ODM initialized successfully!")
+
+    except Exception as e:
+        print(f"❌ Database connection failed: {str(e)}")
+        raise e
