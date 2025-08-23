@@ -11,6 +11,8 @@ from ..auth import (
     security,
 )
 from ..models.user import User
+from ..services.email_service import EmailService
+from ..services.otp_service import OTPService
 from typing import Dict, Any
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
@@ -174,6 +176,109 @@ async def refresh_access_token(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Token refresh failed: {str(e)}",
+        )
+
+
+@router.post(
+    "/send-verification-email",
+    response_model=Dict[str, str],
+    summary="Send verification email",
+    description="Send OTP verification email to user's email address",
+)
+async def send_verification_email(
+    request_data: dict,
+    current_user: User = Depends(get_current_user),
+):
+    """Send verification email with OTP"""
+    try:
+        email = request_data.get("email")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required"
+            )
+
+        # Generate OTP
+        otp = OTPService.generate_otp()
+        expiry = OTPService.generate_otp_expiry()
+
+        # Update user with OTP
+        current_user.email_verification_otp = otp
+        current_user.email_verification_otp_expires_at = expiry
+        await current_user.save()
+
+        # Send email
+        success = await EmailService.send_verification_email(email, otp)
+
+        if success:
+            return {
+                "message": "Verification email sent successfully",
+                "note": "Check your email for the OTP code",
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send verification email",
+            )
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send verification email: {str(e)}",
+        )
+
+
+@router.post(
+    "/verify-email",
+    response_model=Dict[str, str],
+    summary="Verify email with OTP",
+    description="Verify email address using OTP code",
+)
+async def verify_email(
+    request_data: dict,  # {"email": "user@example.com", "otp": "123456"}
+    current_user: User = Depends(get_current_user),
+):
+    """Verify email with OTP"""
+    try:
+        email = request_data.get("email")
+        otp = request_data.get("otp")
+
+        if not email or not otp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email and OTP are required",
+            )
+
+        # Check if OTP matches and is not expired
+        if (
+            current_user.email_verification_otp == otp
+            and not OTPService.is_otp_expired(
+                current_user.email_verification_otp_expires_at
+            )
+        ):
+
+            # Mark email as verified and clear OTP
+            current_user.is_email_verified = True
+            current_user.email_verification_otp = None
+            current_user.email_verification_otp_expires_at = None
+            await current_user.save()
+
+            return {
+                "message": "Email verified successfully",
+                "user": AuthService.convert_user_to_response(current_user),
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OTP"
+            )
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Email verification failed: {str(e)}",
         )
 
 

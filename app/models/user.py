@@ -30,6 +30,9 @@ class User(Document):
     # Profile fields
     is_active: bool = True
     is_verified: bool = False
+    is_email_verified: bool = False
+    email_verification_otp: Optional[str] = None
+    email_verification_otp_expires_at: Optional[datetime] = None
 
     # Course and exam related
     enrolled_courses: List[str] = []

@@ -7,7 +7,11 @@ from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 from .models.user import User, UserRole, ExamCategory
 from .config import settings
-import secrets
+
+# import secrets
+from .services.otp_service import OTPService
+from .services.email_service import EmailService
+
 import re
 
 security = HTTPBearer()
@@ -188,6 +192,46 @@ class AuthService:
             raise credentials_exception
 
         return token_data
+
+    @staticmethod
+    async def generate_and_send_otp(email: str) -> bool:
+        """Generate OTP and send verification email"""
+        user = await User.find_one({"email": email})
+        if not user:
+            return False
+
+        # Generate OTP
+        otp = OTPService.generate_otp()
+        expiry = OTPService.generate_otp_expiry()
+
+        # Update user with OTP
+        user.email_verification_otp = otp
+        user.email_verification_otp_expires_at = expiry
+        await user.save()
+
+        # Send email
+        return await EmailService.send_verification_email(email, otp)
+
+    @staticmethod
+    async def verify_email_otp(email: str, otp: str) -> bool:
+        """Verify email OTP"""
+        user = await User.find_one({"email": email})
+        if not user:
+            return False
+
+        # Check if OTP matches and is not expired
+        if user.email_verification_otp == otp and not OTPService.is_otp_expired(
+            user.email_verification_otp_expires_at
+        ):
+
+            # Mark email as verified and clear OTP
+            user.is_email_verified = True
+            user.email_verification_otp = None
+            user.email_verification_otp_expires_at = None
+            await user.save()
+            return True
+
+        return False
 
     @staticmethod
     async def get_current_user(token: str) -> User:
