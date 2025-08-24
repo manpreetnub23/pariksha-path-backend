@@ -2,7 +2,7 @@ import motor.motor_asyncio
 from beanie import init_beanie
 from .models.user import User
 from .models.question import Question
-from .models.test_series import TestSeries, TestAttempt
+from .models.test_attempt import TestAttempt
 from .models.user_analytics import UserAnalytics
 from .models.admin_action import AdminAction
 from .models.course import Course
@@ -43,7 +43,6 @@ async def init_db():
             document_models=[
                 User,
                 Question,
-                TestSeries,
                 TestAttempt,
                 UserAnalytics,
                 AdminAction,
