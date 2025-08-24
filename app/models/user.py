@@ -1,6 +1,6 @@
 from beanie import Document
 from pydantic import EmailStr, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 from enum import Enum
 
@@ -38,9 +38,21 @@ class User(Document):
     enrolled_courses: List[str] = []
     preferred_exam_categories: List[ExamCategory] = []
 
+    # Dashboard customization
+    dashboard_settings: Dict[str, Any] = {}
+    exam_category_preferences: Dict[str, Dict[str, Any]] = (
+        {}
+    )  # Settings per exam category
+    ui_preferences: Dict[str, Any] = {"theme": "light", "layout": "standard"}
+
     # Payment and access
     purchased_test_series: List[str] = []
+    purchased_materials: List[str] = []  # IDs of purchased study materials
     has_premium_access: bool = False
+
+    # Test history and progress
+    test_progress: Dict[str, Any] = {}  # For test continuation
+    completed_tests: List[str] = []
 
     # Timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

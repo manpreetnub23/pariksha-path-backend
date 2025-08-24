@@ -3,12 +3,14 @@ from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from pydantic import BaseModel
 from .db import init_db
 import uvicorn
 from .models.user import User, UserRole, ExamCategory
 from .routers.auth import router as auth_router, get_current_user
+from .routers.admin import router as admin_router
 
 
 # Security
@@ -40,8 +42,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include authentication routes
+# Include routers
 app.include_router(auth_router)
+app.include_router(admin_router)
 
 
 # Health check endpoints
