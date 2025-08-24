@@ -7,7 +7,7 @@ from ..models.admin_action import AdminAction, ActionType
 from ..models.user import User
 from ..models.enums import UserRole, ExamCategory
 from ..models.user_analytics import UserAnalytics
-from ..auth import AuthService
+from ..auth import AuthService, UserRegisterRequest
 from ..dependencies import admin_required, get_current_user
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin"])
@@ -864,4 +864,51 @@ async def delete_question(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete question: {str(e)}",
+        )
+
+
+# Add this to app/routers/admin.py
+@router.post(
+    "/create-admin",
+    response_model=Dict[str, Any],
+    summary="Create admin account",
+    description="Admin endpoint to create another admin account",
+)
+async def create_admin(
+    admin_data: UserRegisterRequest,
+    current_user: User = Depends(
+        admin_required
+    ),  # Ensures only admins can create admins
+):
+    """Create a new admin account (Admin only)"""
+    try:
+
+        # Create admin user
+        hashed_password = AuthService.get_password_hash(admin_data.password)
+        new_admin = User(
+            name=admin_data.name,
+            email=admin_data.email,
+            phone=admin_data.phone,
+            password_hash=hashed_password,
+            role=UserRole.ADMIN,  # Set role as ADMIN
+            is_active=True,
+            is_verified=True,  # Auto-verify admin accounts
+        )
+        await new_admin.insert()
+
+        # Log the admin creation
+        admin_action = AdminAction(
+            admin_id=str(current_user.id),
+            action_type=ActionType.CREATE,
+            target_collection="users",
+            target_id=str(new_admin.id),
+            changes={"action": "admin_created"},
+        )
+        await admin_action.insert()
+
+        return {"message": "Admin created successfully", "admin_id": str(new_admin.id)}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create admin: {str(e)}",
         )
