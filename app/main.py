@@ -37,7 +37,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+   allow_origins=[
+        "https://pariksha-path2-0.vercel.app",
+        "http://localhost:3000",  # for local dev
+    ],  # Configure appropriately for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
