@@ -8,22 +8,14 @@ from ..auth import (
     Token,
     PasswordResetRequest,
     PasswordUpdateRequest,
-    security,
 )
 from ..models.user import User
 from ..services.email_service import EmailService
 from ..services.otp_service import OTPService
 from typing import Dict, Any
+from ..dependencies import get_current_user, security
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
-
-
-# Dependency to get current user
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-) -> User:
-    """Dependency to get current authenticated user"""
-    return await AuthService.get_current_user(credentials.credentials)
 
 
 @router.post(

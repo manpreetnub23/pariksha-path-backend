@@ -5,7 +5,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
-from .models.user import User, UserRole, ExamCategory
+from .models.user import User
+from .models.enums import UserRole, ExamCategory
 from .config import settings
 
 # import secrets

@@ -1,8 +1,7 @@
-from beanie import Document
-from pydantic import Field
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
+from .base import BaseDocument
 
 
 class BlogCategory(str, Enum):
@@ -13,7 +12,7 @@ class BlogCategory(str, Enum):
     NEWS = "news"
 
 
-class Blog(Document):
+class Blog(BaseDocument):
     title: str
     slug: str  # URL-friendly version of title
     content: str
@@ -41,16 +40,9 @@ class Blog(Document):
     is_published: bool = False
     published_date: Optional[datetime] = None
 
-    # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
     class Settings:
         name = "blogs"
 
-    def update_timestamp(self):
-        self.updated_at = datetime.now(timezone.utc)
-
     def publish(self):
         self.is_published = True
-        self.published_date = datetime.now(timezone.utc)
+        self.published_date = datetime.now()

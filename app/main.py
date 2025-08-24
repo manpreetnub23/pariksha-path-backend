@@ -8,8 +8,10 @@ from datetime import datetime
 from pydantic import BaseModel
 from .db import init_db
 import uvicorn
-from .models.user import User, UserRole, ExamCategory
-from .routers.auth import router as auth_router, get_current_user
+from .models.user import User
+from .models.enums import UserRole, ExamCategory
+from .routers.auth import router as auth_router
+from .dependencies import get_current_user
 from .routers.admin import router as admin_router
 
 

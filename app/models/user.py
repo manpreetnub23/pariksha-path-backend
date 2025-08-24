@@ -2,22 +2,7 @@ from beanie import Document
 from pydantic import EmailStr, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
-from enum import Enum
-
-
-class UserRole(str, Enum):
-    STUDENT = "student"
-    ADMIN = "admin"
-
-
-class ExamCategory(str, Enum):
-    MEDICAL = "medical"  # NEET
-    ENGINEERING = "engineering"  # JEE Main, JEE Advanced
-    TEACHING = "teaching"  # HTET, CTET, DSSSB, KVS
-    GOVT_EXAMS = "govt_exams"  # SSC CGL, CHSL, MTS, CPO, GD
-    BANKING = "banking"  # IBPS PO, Clerk, SBI PO, RBI Assistant, NABARD
-    DEFENCE = "defence"  # NDA, CDS, Airforce X/Y, Navy, Agniveer
-    STATE_EXAMS = "state_exams"  # HSSC, HCS, Patwari, Police, Teachers
+from .enums import UserRole, ExamCategory
 
 
 class User(Document):

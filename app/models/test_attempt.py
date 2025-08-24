@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
-from beanie import Document
-from pydantic import Field, BaseModel
+from pydantic import BaseModel
 from enum import Enum
+from .base import BaseDocument
 
 
 class AnswerStatus(str, Enum):
@@ -32,7 +32,7 @@ class SectionSummary(BaseModel):
     accuracy_percent: float
 
 
-class TestAttempt(Document):
+class TestAttempt(BaseDocument):
     user_id: str
     test_series_id: str
     test_session_id: Optional[str] = (
@@ -79,14 +79,8 @@ class TestAttempt(Document):
     is_reviewed: bool = False
     reviewed_at: Optional[datetime] = None
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
     class Settings:
         name = "test_attempts"
-
-    def update_timestamp(self):
-        self.updated_at = datetime.now(timezone.utc)
 
     def calculate_metrics(self):
         """Calculate performance metrics based on question attempts"""

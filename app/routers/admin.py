@@ -1,17 +1,16 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, status, Query
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, EmailStr
 from ..models.question import Question, QuestionType, DifficultyLevel
 from ..models.admin_action import AdminAction, ActionType
-from ..models.user import User, UserRole, ExamCategory
+from ..models.user import User
+from ..models.enums import UserRole, ExamCategory
 from ..models.user_analytics import UserAnalytics
 from ..auth import AuthService
-from datetime import datetime, timezone
+from ..dependencies import admin_required, get_current_user
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin"])
-security = HTTPBearer()
 
 
 # Student Management Request/Response Models
@@ -137,23 +136,6 @@ class QuestionResponse(BaseModel):
     created_by: str
     created_at: datetime
     updated_at: datetime
-
-
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-) -> User:
-    """Get current user from JWT token"""
-    return await AuthService.get_current_user(credentials.credentials)
-
-
-# Admin-only middleware
-async def admin_required(current_user: User = Depends(get_current_user)):
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
-        )
-    return current_user
 
 
 # Student Management Routes
