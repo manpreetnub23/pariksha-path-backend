@@ -1,8 +1,6 @@
-from beanie import Document
-from pydantic import Field
 from typing import List, Optional, Dict
-from datetime import datetime, timezone
 from enum import Enum
+from .base import BaseDocument
 
 
 class QuestionType(str, Enum):
@@ -18,7 +16,7 @@ class DifficultyLevel(str, Enum):
     HARD = "hard"
 
 
-class Question(Document):
+class Question(BaseDocument):
     # Basic info
     title: str
     question_text: str
@@ -40,14 +38,6 @@ class Question(Document):
 
     # Admin info
     created_by: str  # Admin user ID
-    is_active: bool = True
-
-    # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:
         name = "questions"
-
-    def update_timestamp(self):
-        self.updated_at = datetime.now(timezone.utc)

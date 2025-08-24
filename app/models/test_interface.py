@@ -1,8 +1,8 @@
-from beanie import Document
 from pydantic import Field, BaseModel
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from .base import BaseDocument
 
 
 class NavigationMode(str, Enum):
@@ -42,7 +42,7 @@ class TestInterfaceConfig(BaseModel):
     font_size: str = "medium"
 
 
-class TestSession(Document):
+class TestSession(BaseDocument):
     """Tracks an active test session with interface state"""
 
     user_id: str
@@ -64,7 +64,6 @@ class TestSession(Document):
     interface_config: TestInterfaceConfig
 
     # Session state
-    is_active: bool = True
     is_paused: bool = False
     pause_time: Optional[datetime] = None
     total_pause_duration: int = 0  # In seconds
@@ -72,14 +71,8 @@ class TestSession(Document):
     # Session events
     events: List[Dict[str, Any]] = []  # Track user actions during test
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
     class Settings:
         name = "test_sessions"
-
-    def update_timestamp(self):
-        self.updated_at = datetime.now(timezone.utc)
 
     def calculate_remaining_time(self) -> int:
         """Calculate remaining time in seconds, accounting for pauses"""

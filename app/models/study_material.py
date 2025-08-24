@@ -1,34 +1,8 @@
-from beanie import Document
 from pydantic import Field, BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
-from enum import Enum
-
-
-class MaterialFormat(str, Enum):
-    PDF = "pdf"
-    DOC = "doc"
-    DOCX = "docx"
-    PPTX = "pptx"
-    VIDEO = "video"
-    AUDIO = "audio"
-    LINK = "link"
-
-
-class MaterialCategory(str, Enum):
-    NOTES = "notes"
-    PYQ = "previous_year_questions"
-    REFERENCE = "reference"
-    WORKSHEET = "worksheet"
-    SOLUTION = "solution"
-    FORMULA_SHEET = "formula_sheet"
-    SYLLABUS = "syllabus"
-
-
-class MaterialAccess(str, Enum):
-    FREE = "free"
-    PREMIUM = "premium"
-    COURSE_ONLY = "course_only"  # Available only to enrolled students
+from .base import BaseDocument
+from .enums import MaterialType, MaterialAccessType, MaterialCategory
 
 
 class MaterialDownload(BaseModel):
@@ -40,14 +14,14 @@ class MaterialDownload(BaseModel):
     device_info: Optional[Dict[str, Any]] = None
 
 
-class StudyMaterial(Document):
+class StudyMaterial(BaseDocument):
     """Enhanced model for study materials with tracking"""
 
     title: str
     description: str
 
     # Content details
-    format: MaterialFormat
+    format: MaterialType
     category: MaterialCategory
     file_url: str
     file_size_kb: int
@@ -55,7 +29,7 @@ class StudyMaterial(Document):
     thumbnail_url: Optional[str] = None
 
     # Classification
-    access_type: MaterialAccess = MaterialAccess.PREMIUM
+    access_type: MaterialAccessType = MaterialAccessType.PREMIUM
     exam_category: str  # Medical, Engineering, etc.
     exam_subcategory: Optional[str] = None  # NEET, JEE, etc.
     subject: str
@@ -74,18 +48,10 @@ class StudyMaterial(Document):
 
     # Admin
     created_by: str
-    is_active: bool = True
     version: int = 1  # For tracking updates
-
-    # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:
         name = "study_materials"
-
-    def update_timestamp(self):
-        self.updated_at = datetime.now(timezone.utc)
 
     def track_download(
         self,
@@ -110,7 +76,7 @@ class StudyMaterial(Document):
         self.update_timestamp()
 
 
-class UserMaterialProgress(Document):
+class UserMaterialProgress(BaseDocument):
     """Tracks user progress and interaction with study materials"""
 
     user_id: str

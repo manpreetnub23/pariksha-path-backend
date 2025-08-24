@@ -2,17 +2,7 @@ from beanie import Document
 from pydantic import Field, BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
-from enum import Enum
-
-
-class CourseCategory(str, Enum):
-    MEDICAL = "medical"  # NEET
-    ENGINEERING = "engineering"  # JEE Main, JEE Advanced
-    TEACHING = "teaching"  # HTET, CTET, DSSSB, KVS
-    GOVT_EXAMS = "govt_exams"  # SSC CGL, CHSL, MTS, CPO, GD
-    BANKING = "banking"  # IBPS PO, Clerk, SBI PO, RBI Assistant, NABARD
-    DEFENCE = "defence"  # NDA, CDS, Airforce X/Y, Navy, Agniveer
-    STATE_EXAMS = "state_exams"  # HSSC, HCS, Patwari, Police, Teachers
+from .enums import ExamCategory
 
 
 class ExamSubCategory(BaseModel):
@@ -27,7 +17,7 @@ class Course(Document):
     # Basic info
     title: str
     code: str  # Unique course code
-    category: CourseCategory
+    category: ExamCategory
     sub_category: str  # Specific exam (e.g., "NEET", "JEE Main")
 
     # Content details
