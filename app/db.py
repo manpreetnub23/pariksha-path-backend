@@ -1,6 +1,17 @@
 import motor.motor_asyncio
 from beanie import init_beanie
 from .models.user import User
+from .models.question import Question
+from .models.test_series import TestSeries, TestAttempt
+from .models.user_analytics import UserAnalytics
+from .models.admin_action import AdminAction
+from .models.course import Course
+from .models.material import Material
+from .models.blog import Blog
+from .models.result import Result
+from .models.payment import Payment
+from .models.notification import Notification
+from .models.contact import Contact
 from .config import settings
 from urllib.parse import urlparse
 
@@ -26,7 +37,25 @@ async def init_db():
         print(f"📁 Using database: {db_name}")
         db = client.get_database(db_name)
 
-        await init_beanie(database=db, document_models=[User])
+        # Register all document models
+        await init_beanie(
+            database=db,
+            document_models=[
+                User,
+                Question,
+                TestSeries,
+                TestAttempt,
+                UserAnalytics,
+                AdminAction,
+                Course,
+                Material,
+                Blog,
+                Result,
+                Payment,
+                Notification,
+                Contact,
+            ],
+        )
         print("✅ Beanie ODM initialized successfully!")
 
     except Exception as e:
