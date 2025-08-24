@@ -36,9 +36,13 @@ app = FastAPI(
 )
 
 # Configure CORS
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+   allow_origins=[
+        "https://pariksha-path2-0.vercel.app",
+        "http://localhost:3000",  # for local dev
+    ],  # Configure appropriately for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -161,6 +165,10 @@ async def create_user(user_data: UserCreateRequest):
             detail=f"Error creating user: {str(e)}",
         )
 
-
+# 👇 Keep this at bottom of app/main.py
+# Only run uvicorn locally, not in Vercel
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+
+# Vercel needs this (export app object)
+handler = app
