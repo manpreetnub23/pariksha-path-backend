@@ -16,6 +16,10 @@ class LoggingMiddleware(BaseHTTPMiddleware):
     """Middleware for logging requests and responses"""
 
     async def dispatch(self, request: Request, call_next: Callable):
+
+        print(f"Request Headers: {request.headers}")
+        print(f"Request Method: {request.method}")
+        print(f"Request URL: {request.url}")
         start_time = time.time()
 
         # Log request
@@ -32,6 +36,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
         # Add process time to response headers
         response.headers["X-Process-Time"] = str(process_time)
+        print(f"Response Headers: {response.headers}")
+        print(f"Response Status: {response.status_code}")
+        print(f"Response Body: {response.body}")
 
         return response
 
