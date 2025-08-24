@@ -1,15 +1,17 @@
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, status, Query
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, EmailStr
 from ..models.question import Question, QuestionType, DifficultyLevel
 from ..models.admin_action import AdminAction, ActionType
 from ..models.user import User, UserRole, ExamCategory
 from ..models.user_analytics import UserAnalytics
-from ..auth import get_current_user, AuthService
+from ..auth import AuthService
 from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin"])
+security = HTTPBearer()
 
 
 # Student Management Request/Response Models
@@ -135,6 +137,13 @@ class QuestionResponse(BaseModel):
     created_by: str
     created_at: datetime
     updated_at: datetime
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> User:
+    """Get current user from JWT token"""
+    return await AuthService.get_current_user(credentials.credentials)
 
 
 # Admin-only middleware
