@@ -173,5 +173,5 @@ async def create_user(user_data: UserCreateRequest):
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
 
-# Vercel needs this (export app object)
-handler = app
+# # Vercel needs this (export app object)
+# app = app
