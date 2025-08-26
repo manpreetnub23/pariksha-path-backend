@@ -122,7 +122,7 @@ async def refresh_access_token(
     """
     Refresh access token using refresh token.
 
-    Send refresh token in Authorization header to get new access token.
+    Send refresh token in Authorization header to get new access token hehe.
     """
     import jwt
     from ..auth import SECRET_KEY, ALGORITHM
