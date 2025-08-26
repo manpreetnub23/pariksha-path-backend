@@ -19,6 +19,12 @@ class User(Document):
     email_verification_otp: Optional[str] = None
     email_verification_otp_expires_at: Optional[datetime] = None
 
+    # Security fields
+    login_otp: Optional[str] = None
+    login_otp_expires_at: Optional[datetime] = None
+    reset_password_otp: Optional[str] = None
+    reset_password_otp_expires_at: Optional[datetime] = None
+
     # Course and exam related
     enrolled_courses: List[str] = []
     preferred_exam_categories: List[ExamCategory] = []
