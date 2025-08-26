@@ -6,13 +6,17 @@ from ..auth import (
     UserLoginRequest,
     UserResponse,
     Token,
+    LoginResponse,
     PasswordResetRequest,
     PasswordUpdateRequest,
+    ResetPasswordWithOTPRequest,
 )
 from ..models.user import User
 from ..services.email_service import EmailService
 from ..services.otp_service import OTPService
 from typing import Dict, Any
+from datetime import datetime, timezone
+from ..auth import ACCESS_TOKEN_EXPIRE_MINUTES
 from ..dependencies import get_current_user, security
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
@@ -41,11 +45,23 @@ async def register(user_data: UserRegisterRequest):
         new_user = await AuthService.register_user(user_data)
         user_response = AuthService.convert_user_to_response(new_user)
 
+        # Send welcome email
+        await EmailService.send_welcome_email(new_user.email, new_user.name)
+
+        # Generate and send verification OTP
+        otp = OTPService.generate_otp()
+        expiry = OTPService.generate_otp_expiry()
+        new_user.email_verification_otp = otp
+        new_user.email_verification_otp_expires_at = expiry
+        await new_user.save()
+
+        await EmailService.send_verification_email(new_user.email, otp)
+
         return {
             "message": "User registered successfully",
             "user": user_response,
             "next_steps": [
-                "Please verify your email address",
+                "Please verify your email address with the OTP sent",
                 "Complete your profile setup",
                 "Explore available courses and mock tests",
             ],
@@ -62,9 +78,9 @@ async def register(user_data: UserRegisterRequest):
 
 @router.post(
     "/login",
-    response_model=Dict[str, Any],
+    response_model=LoginResponse,
     summary="Login user",
-    description="Authenticate user and return access tokens",
+    description="Authenticate user and either return tokens or request OTP verification",
 )
 async def login(login_data: UserLoginRequest):
     """
@@ -73,18 +89,77 @@ async def login(login_data: UserLoginRequest):
     - **email**: Registered email address
     - **password**: User password
 
-    Returns access token, refresh token, and user information.
+    If OTP verification is enabled, an OTP will be sent to the user's email,
+    and the user will need to verify it before receiving tokens.
+
+    Otherwise, returns access token, refresh token, and user information directly.
     """
     try:
-        user, token = await AuthService.login_user(login_data)
-        user_response = AuthService.convert_user_to_response(user)
+        from ..config import settings
 
-        return {
-            "message": "Login successful",
-            "user": user_response,
-            "tokens": token,
-            "dashboard_url": f"/dashboard/{user.role.value}",
-        }
+        user = await AuthService.authenticate_user(
+            login_data.email, login_data.password
+        )
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Account is deactivated. Please contact admin.",
+            )
+
+        # Update last login
+        user.last_login = datetime.now(timezone.utc)
+        user.update_timestamp()
+        await user.save()
+
+        # Check if login OTP verification is required
+        if settings.LOGIN_OTP_REQUIRED:
+            # Generate OTP
+            otp = OTPService.generate_otp()
+            expiry = OTPService.generate_otp_expiry()
+
+            # Update user with login OTP
+            user.login_otp = otp
+            user.login_otp_expires_at = expiry
+            await user.save()
+
+            # Send OTP email
+            success = await EmailService.send_login_otp_email(user.email, otp)
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to send verification email",
+                )
+
+            # Return response indicating OTP verification is required
+            return LoginResponse(
+                message="Login requires verification",
+                requires_verification=True,
+                user=AuthService.convert_user_to_response(user).dict(),
+            )
+
+        # If OTP is not required, return tokens directly
+        token = Token(
+            access_token=AuthService.create_access_token(data={"sub": user.email}),
+            refresh_token=AuthService.create_refresh_token(data={"sub": user.email}),
+            token_type="bearer",
+            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        )
+
+        return LoginResponse(
+            message="Login successful",
+            requires_verification=False,
+            user=AuthService.convert_user_to_response(user).dict(),
+            tokens=token,
+            dashboard_url=f"/dashboard/{user.role.value}",
+        )
 
     except HTTPException as e:
         raise e
@@ -222,8 +297,83 @@ async def send_verification_email(
 
 
 @router.post(
+    "/verify-login",
+    response_model=Dict[str, Any],
+    summary="Verify login with OTP",
+    description="Complete login by verifying OTP sent to email",
+)
+async def verify_login(
+    request_data: dict,
+):  # {"email": "user@example.com", "otp": "123456"}
+    """
+    Verify login with OTP.
+
+    After login, if OTP verification is required, this endpoint is used to verify
+    the OTP and complete the login process.
+
+    Returns access token, refresh token, and user information.
+    """
+    try:
+        email = request_data.get("email")
+        otp = request_data.get("otp")
+
+        if not email or not otp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email and OTP are required",
+            )
+
+        # Find user by email
+        user = await User.find_one({"email": email})
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User not found",
+            )
+
+        # Check if OTP matches and is not expired
+        if user.login_otp == otp and not OTPService.is_otp_expired(
+            user.login_otp_expires_at
+        ):
+            # Clear OTP
+            user.login_otp = None
+            user.login_otp_expires_at = None
+            await user.save()
+
+            # Generate tokens
+            token = Token(
+                access_token=AuthService.create_access_token(data={"sub": user.email}),
+                refresh_token=AuthService.create_refresh_token(
+                    data={"sub": user.email}
+                ),
+                token_type="bearer",
+                expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            )
+
+            return {
+                "message": "Login verification successful",
+                "user": AuthService.convert_user_to_response(user),
+                "tokens": token,
+                "dashboard_url": f"/dashboard/{user.role.value}",
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired OTP",
+            )
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login verification failed: {str(e)}",
+        )
+
+
+@router.post(
     "/verify-email",
-    response_model=Dict[str, str],
+    response_model=Dict[str, Any],
     summary="Verify email with OTP",
     description="Verify email address using OTP code",
 )
@@ -407,23 +557,105 @@ async def logout(current_user: User = Depends(get_current_user)):
     "/forgot-password",
     response_model=Dict[str, str],
     summary="Request password reset",
-    description="Request password reset link (placeholder implementation)",
+    description="Request password reset OTP via email",
 )
 async def forgot_password(request_data: PasswordResetRequest):
     """
-    Request password reset.
+    Request a password reset by sending an OTP to the user's registered email.
 
-    Note: This is a placeholder implementation.
-    In production, this would send a reset email.
+    - **email**: Email address of the account to reset password for
     """
-    # Check if user exists
-    user = await User.find_one({"email": request_data.email})
+    try:
+        # Check if user exists but don't reveal this information in the response
+        user = await User.find_one({"email": request_data.email})
 
-    # Always return success message for security (don't reveal if email exists)
-    return {
-        "message": "If the email exists, a password reset link will be sent",
-        "note": "This is a placeholder implementation. Email functionality not yet implemented.",
-    }
+        if user:
+            # Generate OTP
+            otp = OTPService.generate_otp()
+            expiry = OTPService.generate_otp_expiry()
+
+            # Update user with reset password OTP
+            user.reset_password_otp = otp
+            user.reset_password_otp_expires_at = expiry
+            await user.save()
+
+            # Send email with OTP
+            await EmailService.send_password_reset_email(request_data.email, otp)
+
+        # Always return success message for security (don't reveal if email exists)
+        return {
+            "message": "If the email exists, a password reset code has been sent",
+            "detail": "Please check your email for the reset code",
+        }
+
+    except Exception as e:
+        # Log the error but don't reveal specifics in the response
+        print(f"Password reset request failed: {str(e)}")
+        return {
+            "message": "If the email exists, a password reset code has been sent",
+            "detail": "Please check your email for the reset code",
+        }
+
+
+@router.post(
+    "/reset-password",
+    response_model=Dict[str, str],
+    summary="Reset password with OTP",
+    description="Reset password using OTP sent to email",
+)
+async def reset_password_with_otp(reset_data: ResetPasswordWithOTPRequest):
+    """
+    Reset password using OTP sent to email.
+
+    - **email**: Email address of the account
+    - **otp**: The OTP code received via email
+    - **new_password**: New password to set
+    """
+    try:
+        # Find user by email
+        user = await User.find_one({"email": reset_data.email})
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset code",
+            )
+
+        # Check if OTP matches and is not expired
+        if user.reset_password_otp == reset_data.otp and not OTPService.is_otp_expired(
+            user.reset_password_otp_expires_at
+        ):
+
+            # Validate new password
+            if not AuthService.validate_password(reset_data.new_password):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Password must be at least 8 characters long and contain uppercase, lowercase, number, and special character",
+                )
+
+            # Update password and clear OTP
+            user.password_hash = AuthService.get_password_hash(reset_data.new_password)
+            user.reset_password_otp = None
+            user.reset_password_otp_expires_at = None
+            user.update_timestamp()
+            await user.save()
+
+            return {
+                "message": "Password reset successful",
+                "detail": "You can now log in with your new password",
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset code",
+            )
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Password reset failed: {str(e)}",
+        )
 
 
 @router.get(

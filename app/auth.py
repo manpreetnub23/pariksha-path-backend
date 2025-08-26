@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr
 from .models.user import User
 from .models.enums import UserRole, ExamCategory
 from .config import settings
+from typing import Dict, Any
 
 # import secrets
 from .services.otp_service import OTPService
@@ -88,6 +89,20 @@ class PasswordResetRequest(BaseModel):
 class PasswordUpdateRequest(BaseModel):
     current_password: str
     new_password: str
+
+
+class ResetPasswordWithOTPRequest(BaseModel):
+    email: EmailStr
+    otp: str
+    new_password: str
+
+
+class LoginResponse(BaseModel):
+    message: str
+    requires_verification: bool
+    user: Dict[str, Any]
+    tokens: Optional[Token] = None
+    dashboard_url: Optional[str] = None
 
 
 class AuthService:
