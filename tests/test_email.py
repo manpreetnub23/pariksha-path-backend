@@ -13,7 +13,7 @@ from app.services.otp_service import OTPService
 async def test_welcome_email():
     print("\n🧪 Testing Welcome Email...")
     result = await EmailService.send_welcome_email(
-        "manavchauhan124@gmail.com", "Test User"
+        "officialuse7055@gmail.com", "Test User"
     )
     print("✉️  Welcome Email sent:", "✅ Success" if result else "❌ Failed")
 
@@ -23,7 +23,7 @@ async def test_verification_email():
     otp = OTPService.generate_otp()
     print(f"Generated OTP: {otp}")
     result = await EmailService.send_verification_email(
-        "manavchauhan124@gmail.com", otp
+        "officialuse7055@gmail.com", otp
     )
     print("✉️  Verification Email sent:", "✅ Success" if result else "❌ Failed")
 
@@ -33,7 +33,7 @@ async def test_password_reset_email():
     otp = OTPService.generate_otp()
     print(f"Generated OTP: {otp}")
     result = await EmailService.send_password_reset_email(
-        "manavchauhan124@gmail.com", otp
+        "officialuse7055@gmail.com", otp
     )
     print("✉️  Password Reset Email sent:", "✅ Success" if result else "❌ Failed")
 
@@ -42,7 +42,7 @@ async def test_login_otp_email():
     print("\n🧪 Testing Login OTP Email...")
     otp = OTPService.generate_otp()
     print(f"Generated OTP: {otp}")
-    result = await EmailService.send_login_otp_email("manavchauhan124@gmail.com", otp)
+    result = await EmailService.send_login_otp_email("officialuse7055@gmail.com", otp)
     print("✉️  Login OTP Email sent:", "✅ Success" if result else "❌ Failed")
 
 
@@ -84,7 +84,7 @@ async def run_all_tests():
 
 if __name__ == "__main__":
     # Replace this email with your test email address
-    TEST_EMAIL = "manavchauhan124@gmail.com"
+    TEST_EMAIL = "officialuse7055@gmail.com"
 
     if "your-test-email" in TEST_EMAIL:
         print("⚠️  Please edit the script to use your actual email address first!")
