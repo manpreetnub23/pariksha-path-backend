@@ -12,6 +12,7 @@ from .models.result import Result
 from .models.payment import Payment
 from .models.notification import Notification
 from .models.contact import Contact
+from .models.exam_category_structure import ExamCategoryStructure
 from .config import settings
 from urllib.parse import urlparse
 
@@ -53,6 +54,7 @@ async def init_db():
                 Payment,
                 Notification,
                 Contact,
+                ExamCategoryStructure,
             ],
         )
         print("✅ Beanie ODM initialized successfully!")

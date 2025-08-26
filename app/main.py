@@ -13,6 +13,8 @@ from .models.enums import UserRole, ExamCategory
 from .routers.auth import router as auth_router
 from .dependencies import get_current_user
 from .routers.admin import router as admin_router
+from .routers.courses import router as courses_router
+from .routers.exam_categories import router as exam_categories_router
 
 
 # Security
@@ -53,6 +55,8 @@ app.add_middleware(
 # Include routers
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(courses_router)
+app.include_router(exam_categories_router)
 
 
 # Health check endpoints
