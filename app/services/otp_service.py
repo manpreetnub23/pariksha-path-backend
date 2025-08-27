@@ -15,6 +15,17 @@ class OTPService:
         return datetime.now(timezone.utc) + timedelta(minutes=minutes)
 
     @staticmethod
-    def is_otp_expired(expiry_timestamp: datetime) -> bool:
-        """Check if OTP has expired"""
-        return datetime.now(timezone.utc) > expiry_timestamp
+    def is_otp_expired(expiry_time: datetime) -> bool:
+        """
+        Check if OTP has expired, handling both timezone-aware and timezone-naive datetimes.
+
+        Args:
+            expiry_time: The expiry datetime to check
+
+        Returns:
+            bool: True if OTP has expired, False otherwise
+        """
+        now = datetime.now(timezone.utc)
+        if expiry_time.tzinfo is None:
+            expiry_time = expiry_time.replace(tzinfo=timezone.utc)
+        return now > expiry_time
