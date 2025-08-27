@@ -374,14 +374,14 @@ async def verify_login(
 @router.post(
     "/verify-email",
     response_model=Dict[str, Any],
-    summary="Verify email with OTP",
-    description="Verify email address using OTP code",
+    summary="Verify email with OTP (for logged-in users)",
+    description="Verify email address using OTP code for logged-in users",
 )
 async def verify_email(
     request_data: dict,  # {"email": "user@example.com", "otp": "123456"}
     current_user: User = Depends(get_current_user),
 ):
-    """Verify email with OTP"""
+    """Verify email with OTP for logged-in users"""
     try:
         email = request_data.get("email")
         otp = request_data.get("otp")
@@ -422,6 +422,132 @@ async def verify_email(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Email verification failed: {str(e)}",
         )
+
+
+@router.post(
+    "/verify-registration",
+    response_model=Dict[str, Any],
+    summary="Verify email after registration",
+    description="Verify email address using OTP code after registration (no login required)",
+)
+async def verify_registration_email(
+    request_data: dict,  # {"email": "user@example.com", "otp": "123456"}
+):
+    """
+    Verify email with OTP after registration without requiring login.
+
+    This endpoint allows users to verify their email immediately after registration
+    before logging in for the first time.
+
+    Args:
+        request_data: Dictionary containing email and OTP
+
+    Returns:
+        Success message and user data on successful verification
+    """
+    try:
+        email = request_data.get("email")
+        otp = request_data.get("otp")
+
+        if not email or not otp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email and OTP are required",
+            )
+
+        # Use the AuthService to verify the OTP
+        success = await AuthService.verify_email_otp(email, otp)
+
+        if success:
+            # Get the updated user to return in response
+            user = await User.find_one({"email": email})
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found",
+                )
+
+            # Generate tokens to allow immediate login after verification
+            token = Token(
+                access_token=AuthService.create_access_token(data={"sub": user.email}),
+                refresh_token=AuthService.create_refresh_token(
+                    data={"sub": user.email}
+                ),
+                token_type="bearer",
+                expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            )
+
+            return {
+                "message": "Email verified successfully",
+                "user": AuthService.convert_user_to_response(user),
+                "tokens": token,
+                "dashboard_url": f"/dashboard/{user.role.value}",
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OTP"
+            )
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Email verification failed: {str(e)}",
+        )
+
+
+# manpreet ne add kiya hai
+# ------------------------------ yahan se
+
+
+@router.post(
+    "/resend-verification-email",
+    response_model=Dict[str, str],
+    summary="Resend OTP for email verification",
+)
+async def resend_verification_email(request_data: dict):
+    """
+    Resend OTP to user's email for verification.
+    """
+    try:
+        email = request_data.get("email")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required"
+            )
+
+        user = await User.find_one({"email": email})
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            )
+
+        # Generate OTP
+        otp = OTPService.generate_otp()
+        expiry = OTPService.generate_otp_expiry()
+        user.email_verification_otp = otp
+        user.email_verification_otp_expires_at = expiry
+        await user.save()
+
+        # Send OTP email
+        await EmailService.send_verification_email(email, otp)
+
+        return {
+            "message": "Verification email resent successfully",
+            "note": "Check your email for the OTP code",
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to resend verification email: {str(e)}",
+        )
+
+
+# -------------------------------------------------- yahan tak
 
 
 @router.put(

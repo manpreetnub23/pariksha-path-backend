@@ -2,16 +2,18 @@ import motor.motor_asyncio
 from beanie import init_beanie
 from .models.user import User
 from .models.question import Question
-from .models.test_attempt import TestAttempt
+from .models.test import TestSeries, TestSession, TestAttempt
 from .models.user_analytics import UserAnalytics
 from .models.admin_action import AdminAction
 from .models.course import Course
 from .models.material import Material
+from .models.study_material import StudyMaterial, UserMaterialProgress
 from .models.blog import Blog
 from .models.result import Result
 from .models.payment import Payment
 from .models.notification import Notification
 from .models.contact import Contact
+from .models.exam_category_structure import ExamCategoryStructure
 from .config import settings
 from urllib.parse import urlparse
 
@@ -44,15 +46,20 @@ async def init_db():
                 User,
                 Question,
                 TestAttempt,
+                TestSeries,
+                TestSession,
                 UserAnalytics,
                 AdminAction,
                 Course,
                 Material,
+                StudyMaterial,
+                UserMaterialProgress,
                 Blog,
                 Result,
                 Payment,
                 Notification,
                 Contact,
+                ExamCategoryStructure,
             ],
         )
         print("✅ Beanie ODM initialized successfully!")
