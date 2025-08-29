@@ -1,7 +1,21 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Depends, status, Query
+import io
+import re
 from typing import List, Optional, Dict, Any
+
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Depends,
+    status,
+    Query,
+    UploadFile,
+    File,
+    Form,
+)
 from pydantic import BaseModel, EmailStr
+
+from ..models.test import TestSeries
 from ..models.question import Question, QuestionType, DifficultyLevel
 from ..models.admin_action import AdminAction, ActionType
 from ..models.user import User
@@ -136,6 +150,21 @@ class QuestionResponse(BaseModel):
     created_by: str
     created_at: datetime
     updated_at: datetime
+
+
+# Helper function to extract image URLs from text
+def extract_image_urls(text):
+    if not isinstance(text, str):
+        return text, []
+
+    # Pattern to match URLs
+    url_pattern = r"https?://\S+"
+    urls = re.findall(url_pattern, text)
+
+    # Remove URLs from text
+    clean_text = re.sub(url_pattern, "", text).strip()
+
+    return clean_text, urls
 
 
 # Student Management Routes
@@ -911,4 +940,266 @@ async def create_admin(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create admin: {str(e)}",
+        )
+
+
+@router.post(
+    "/tests/import-questions",
+    response_model=Dict[str, Any],
+    status_code=status.HTTP_200_OK,
+    summary="Import questions from CSV",
+    description="Admin endpoint to import questions from CSV file and create/update a test",
+)
+async def import_questions_from_csv(
+    file: UploadFile = File(...),
+    test_title: str = Form(...),
+    exam_category: ExamCategory = Form(...),
+    exam_subcategory: str = Form(...),
+    subject: str = Form(...),
+    topic: Optional[str] = Form(None),
+    difficulty: DifficultyLevel = Form(DifficultyLevel.MEDIUM),
+    duration_minutes: int = Form(60),
+    is_free: bool = Form(False),
+    existing_test_id: Optional[str] = Form(None),
+    current_user: User = Depends(admin_required),
+):
+    """
+    Import questions from CSV file and create/update a test.
+
+    The CSV should have the following columns:
+    - Question
+    - Option A
+    - Option B
+    - Option C
+    - Option D
+    - Correct Answer (A, B, C, or D)
+    - Explanation (optional)
+    - Remarks (optional)
+
+    Images can be included as URLs in any field.
+    """
+    try:
+        # Read CSV file
+        contents = await file.read()
+        df = pd.read_csv(io.BytesIO(contents))
+
+        # Validate CSV structure
+        required_columns = [
+            "Question",
+            "Option A",
+            "Option B",
+            "Option C",
+            "Option D",
+            "Correct Answer",
+        ]
+        for col in required_columns:
+            if col not in df.columns:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Missing required column: {col}",
+                )
+
+        # Process questions
+        questions = []
+        errors = []
+
+        for idx, row in df.iterrows():
+            try:
+                # Extract image URLs from question text
+                question_text, question_images = extract_image_urls(row["Question"])
+
+                # Process options and extract image URLs
+                options = []
+                for opt in ["A", "B", "C", "D"]:
+                    option_text, option_images = extract_image_urls(
+                        row[f"Option {opt}"]
+                    )
+                    is_correct = str(row["Correct Answer"]).strip().upper() == opt
+
+                    option_data = {
+                        "text": option_text,
+                        "is_correct": is_correct,
+                    }
+
+                    # Add image URLs if present
+                    if option_images:
+                        option_data["image_urls"] = option_images
+
+                    options.append(option_data)
+
+                # Extract explanation and remarks with any image URLs
+                explanation, explanation_images = extract_image_urls(
+                    row.get("Explanation", "")
+                )
+                remarks, remarks_images = extract_image_urls(row.get("Remarks", ""))
+
+                # Create question object
+                question = Question(
+                    title=question_text[:50]
+                    + ("..." if len(question_text) > 50 else ""),
+                    question_text=question_text,
+                    question_type=QuestionType.MCQ,
+                    difficulty_level=difficulty,
+                    exam_type=exam_subcategory,
+                    options=options,
+                    explanation=explanation,
+                    subject=subject,
+                    topic=topic or "General",
+                    created_by=str(current_user.id),
+                    tags=[exam_category.value, exam_subcategory, subject],
+                    is_active=True,
+                )
+
+                # Add image URLs to question metadata
+                question_metadata = {}
+                if question_images:
+                    question_metadata["question_images"] = question_images
+                if explanation_images:
+                    question_metadata["explanation_images"] = explanation_images
+                if remarks_images:
+                    question_metadata["remarks_images"] = remarks_images
+                if remarks:
+                    question_metadata["remarks"] = remarks
+
+                # Store metadata if any
+                if question_metadata:
+                    # You might need to add a metadata field to your Question model
+                    # This is just a suggestion for where to store additional info
+                    question.metadata = question_metadata
+
+                # Insert question into database
+                await question.insert()
+                questions.append(question)
+
+            except Exception as e:
+                errors.append(f"Error processing question at row {idx+1}: {str(e)}")
+
+        # Handle test series creation or update
+        test_series = None
+        if existing_test_id:
+            # Update existing test
+            test_series = await TestSeries.get(existing_test_id)
+            if not test_series:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Test with ID {existing_test_id} not found",
+                )
+
+            # Add new questions to existing test
+            question_ids = [str(q.id) for q in questions]
+            test_series.question_ids.extend(question_ids)
+            test_series.total_questions = len(test_series.question_ids)
+            await test_series.save()
+        else:
+            # Create new test series
+            test_series = TestSeries(
+                title=test_title,
+                description=f"{test_title} for {exam_subcategory}",
+                exam_category=exam_category.value,
+                exam_subcategory=exam_subcategory,
+                subject=subject,
+                total_questions=len(questions),
+                duration_minutes=duration_minutes,
+                max_score=len(questions),  # 1 point per question
+                difficulty=difficulty,
+                question_ids=[str(q.id) for q in questions],
+                is_free=is_free,
+                created_by=str(current_user.id),
+            )
+            await test_series.insert()
+
+        # Log admin action
+        admin_action = AdminAction(
+            admin_id=str(current_user.id),
+            action_type=(
+                ActionType.CREATE if not existing_test_id else ActionType.UPDATE
+            ),
+            target_collection="test_series",
+            target_id=str(test_series.id),
+            changes={
+                "action": "import_questions",
+                "questions_added": len(questions),
+                "source": file.filename,
+            },
+        )
+        await admin_action.insert()
+
+        return {
+            "message": f"Successfully imported {len(questions)} questions",
+            "test_id": str(test_series.id),
+            "test_title": test_series.title,
+            "questions_imported": len(questions),
+            "errors": errors if errors else None,
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to import questions: {str(e)}",
+        )
+
+
+# Also add an endpoint to view test details including questions
+@router.get(
+    "/tests/{test_id}/questions",
+    response_model=Dict[str, Any],
+    summary="Get test questions",
+    description="Admin endpoint to view all questions in a test",
+)
+async def get_test_questions(
+    test_id: str, current_user: User = Depends(admin_required)
+):
+    """Get all questions for a specific test"""
+    try:
+        # Get test
+        test = await TestSeries.get(test_id)
+        if not test:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Test not found"
+            )
+
+        # Get questions
+        questions = []
+        if test.question_ids:
+            questions = await Question.find(
+                {"_id": {"$in": test.question_ids}}
+            ).to_list()
+
+        # Format response
+        question_data = [
+            {
+                "id": str(q.id),
+                "title": q.title,
+                "question_text": q.question_text,
+                "options": q.options,
+                "explanation": q.explanation,
+                "subject": q.subject,
+                "topic": q.topic,
+                "difficulty_level": q.difficulty_level,
+                "metadata": getattr(q, "metadata", None),
+            }
+            for q in questions
+        ]
+
+        return {
+            "message": "Test questions retrieved successfully",
+            "test": {
+                "id": str(test.id),
+                "title": test.title,
+                "exam_category": test.exam_category,
+                "exam_subcategory": test.exam_subcategory,
+                "total_questions": test.total_questions,
+                "duration_minutes": test.duration_minutes,
+            },
+            "questions": question_data,
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve test questions: {str(e)}",
         )
