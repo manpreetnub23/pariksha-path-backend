@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from enum import Enum
 from .base import BaseDocument
 
@@ -35,7 +35,9 @@ class Question(BaseDocument):
     subject: str  # e.g., "Physics", "Chemistry", "Mathematics"
     topic: str  # e.g., "Mechanics", "Organic Chemistry"
     tags: List[str] = []
-
+    metadata: Optional[Dict[str, Any]] = (
+        {}
+    )  # For storing additional data like image URLs
     # Admin info
     created_by: str  # Admin user ID
 
