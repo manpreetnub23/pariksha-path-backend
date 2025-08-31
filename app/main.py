@@ -19,6 +19,7 @@ from .routers.admin import router as admin_router
 from .routers.courses import router as courses_router
 from .routers.exam_categories import router as exam_categories_router
 from .routers.tests import router as tests_router
+from .routers.materials import router as materials_router
 
 
 # Security
@@ -62,6 +63,7 @@ app.include_router(admin_router)
 app.include_router(courses_router)
 app.include_router(exam_categories_router)
 app.include_router(tests_router)
+app.include_router(materials_router)
 
 
 # Health check endpoints
