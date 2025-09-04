@@ -8,11 +8,11 @@ from .models.admin_action import AdminAction
 from .models.course import Course
 from .models.material import Material
 from .models.study_material import StudyMaterial, UserMaterialProgress
-from .models.blog import Blog
+# from .models.blog import Blog
 from .models.result import Result
-from .models.payment import Payment
-from .models.notification import Notification
-from .models.contact import Contact
+# from .models.payment import Payment
+# from .models.notification import Notification
+# from .models.contact import Contact
 from .models.exam_category_structure import ExamCategoryStructure
 from .config import settings
 from urllib.parse import urlparse
@@ -54,11 +54,11 @@ async def init_db():
                 Material,
                 StudyMaterial,
                 UserMaterialProgress,
-                Blog,
-                Result,
-                Payment,
-                Notification,
-                Contact,
+                # Blog,
+                # Result,
+                # Payment,
+                # Notification,
+                # Contact,
                 ExamCategoryStructure,
             ],
         )
