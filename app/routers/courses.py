@@ -156,12 +156,116 @@ async def create_course(
         )
 
 
+# # Endpoint to get enrolled courses for current user
+# @router.get(
+#     "/enrolled",
+#     response_model=List[Dict[str, Any]],
+#     summary="Get enrolled courses",
+#     description="Get a list of courses the current user is enrolled in",
+# )
+# async def get_enrolled_courses(current_user: User = Depends(get_current_user)):
+#     """Get courses the current user is enrolled in"""
+#     try:
+#         # Get user's enrolled courses
+#         user = await User.get(current_user.id)
+#         if not user.enrolled_courses:
+#             return []
+
+#         # Get full course details
+#         courses = []
+#         for course_id in user.enrolled_courses:
+#             course = await Course.get(course_id)
+#             if course:
+#                 course_dict = course.dict()
+#                 course_dict["id"] = str(course.id)
+#                 courses.append(course_dict)
+
+#         return courses
+
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Failed to retrieve enrolled courses: {str(e)}"
+#         )
+
+
+# Endpoint to get enrolled courses for current user
+@router.get(
+    "/enrolled",
+    response_model=Dict[str, Any],
+    summary="Get enrolled courses",
+    description="Get all courses the current user is enrolled in",
+)
+async def get_enrolled_courses(current_user: User = Depends(get_current_user)):
+    """Get courses the current user is enrolled in"""
+    try:
+        # Initialize empty list if enrolled_courses is None
+        enrolled_course_ids = current_user.enrolled_courses or []
+
+        if not enrolled_course_ids:
+            return {
+                "message": "You are not enrolled in any courses",
+                "courses": [],
+            }
+
+        # Fetch all enrolled courses - Convert string IDs to ObjectIds
+        from bson import ObjectId
+
+        # Convert string IDs to ObjectIds for the database query
+        object_ids = []
+        for course_id in enrolled_course_ids:
+            try:
+                object_ids.append(ObjectId(course_id))
+            except Exception as e:
+                print(f"Invalid ObjectId: {course_id}, error: {e}")
+                continue
+
+        if not object_ids:
+            return {
+                "message": "No valid course IDs found",
+                "courses": [],
+            }
+
+        courses = await Course.find(
+            {"_id": {"$in": object_ids}, "is_active": True}
+        ).to_list()
+
+        # Convert course objects to response format
+        course_responses = [
+            {
+                "id": str(course.id),
+                "title": course.title,
+                "code": course.code,
+                "category": course.category.value,
+                "sub_category": course.sub_category,
+                "description": course.description,
+                "thumbnail_url": course.thumbnail_url,
+                "icon_url": course.icon_url,
+                "material_ids": course.material_ids,
+                "test_series_ids": course.test_series_ids,
+            }
+            for course in courses
+        ]
+
+        return {
+            "message": "Enrolled courses retrieved successfully",
+            "courses": course_responses,
+        }
+
+    except Exception as e:
+        print(f"Error in get_enrolled_courses: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve enrolled courses: {str(e)}",
+        )
+
+
 # Endpoint to get all courses (public)
 @router.get(
     "/",
     response_model=Dict[str, Any],
     summary="List all courses",
-    description="Get a list of all available courses with optional filtering",
+    description="Get a paginated list of all available courses with optional filters",
 )
 async def list_courses(
     category: Optional[ExamCategory] = Query(
@@ -529,57 +633,6 @@ async def enroll_in_course(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to enroll in course: {str(e)}",
-        )
-
-
-# Endpoint to get enrolled courses for current user
-@router.get(
-    "/enrolled",
-    response_model=Dict[str, Any],
-    summary="Get enrolled courses",
-    description="Get all courses the current user is enrolled in",
-)
-async def get_enrolled_courses(current_user: User = Depends(get_current_user)):
-    """Get courses the current user is enrolled in"""
-    try:
-        if not current_user.enrolled_courses:
-            return {
-                "message": "You are not enrolled in any courses",
-                "courses": [],
-            }
-
-        # Fetch all enrolled courses
-        enrolled_course_ids = current_user.enrolled_courses
-        courses = await Course.find(
-            {"_id": {"$in": enrolled_course_ids}, "is_active": True}
-        ).to_list()
-
-        # Convert course objects to response format
-        course_responses = [
-            {
-                "id": str(course.id),
-                "title": course.title,
-                "code": course.code,
-                "category": course.category.value,
-                "sub_category": course.sub_category,
-                "description": course.description,
-                "thumbnail_url": course.thumbnail_url,
-                "icon_url": course.icon_url,
-                "material_ids": course.material_ids,
-                "test_series_ids": course.test_series_ids,
-            }
-            for course in courses
-        ]
-
-        return {
-            "message": "Enrolled courses retrieved successfully",
-            "courses": course_responses,
-        }
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve enrolled courses: {str(e)}",
         )
 
 
