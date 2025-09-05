@@ -688,267 +688,218 @@ async def get_student_analytics(
         )
 
 
-# 1. Create Question
+# # 1. Create Question
+# @router.post(
+#     "/questions",
+#     response_model=Dict[str, Any],
+#     status_code=status.HTTP_201_CREATED,
+#     summary="Create a new question",
+#     description="Admin endpoint to create a new question with multiple options",
+# )
+# async def create_question(
+#     question_data: QuestionCreateRequest, current_user: User = Depends(admin_required)
+# ):
+#     """
+#     Create a new question (Admin only)
+
+#     The request body must contain all the required question fields including options.
+#     At least one option must be marked as correct.
+#     """
+#     try:
+#         # Check if at least one option is marked as correct
+#         has_correct_option = any(option.is_correct for option in question_data.options)
+#         if not has_correct_option:
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail="At least one option must be marked as correct",
+#             )
+
+#         # Convert request model to document model
+#         options_dicts = [
+#             {"text": opt.text, "is_correct": opt.is_correct}
+#             for opt in question_data.options
+#         ]
+
+#         # Create the question
+#         new_question = Question(
+#             title=question_data.title,
+#             question_text=question_data.question_text,
+#             question_type=question_data.question_type,
+#             difficulty_level=question_data.difficulty_level,
+#             exam_type=question_data.exam_type,
+#             exam_year=question_data.exam_year,
+#             options=options_dicts,
+#             explanation=question_data.explanation,
+#             subject=question_data.subject,
+#             topic=question_data.topic,
+#             tags=question_data.tags,
+#             created_by=str(current_user.id),
+#             is_active=True,
+#         )
+
+#         await new_question.insert()
+
+#         # Log admin action
+#         admin_action = AdminAction(
+#             admin_id=str(current_user.id),
+#             action_type=ActionType.CREATE,
+#             target_collection="questions",
+#             target_id=str(new_question.id),
+#             changes={"action": "question_created"},
+#         )
+#         await admin_action.insert()
+
+#         return {
+#             "message": "Question created successfully",
+#             "question_id": str(new_question.id),
+#         }
+
+#     except HTTPException as e:
+#         raise e
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Failed to create question: {str(e)}",
+#         )
+
+
+# # 2. Update Question
+# @router.put(
+#     "/questions/{question_id}",
+#     response_model=Dict[str, Any],
+#     summary="Update an existing question",
+#     description="Admin endpoint to update a question's details",
+# )
+# async def update_question(
+#     question_id: str,
+#     question_data: QuestionUpdateRequest,
+#     current_user: User = Depends(admin_required),
+# ):
+#     """
+#     Update an existing question (Admin only)
+
+#     Provide the fields you want to update. If options are provided, all options will be replaced.
+#     """
+#     try:
+#         # Find the question
+#         question = await Question.get(question_id)
+#         if not question:
+#             raise HTTPException(
+#                 status_code=status.HTTP_404_NOT_FOUND,
+#                 detail="Question not found",
+#             )
+
+#         # Track changes for audit log
+#         changes = {}
+
+#         # Update fields if provided
+#         for field, value in question_data.dict(exclude_unset=True).items():
+#             if field == "options" and value is not None:
+#                 # Convert options to dictionary format
+#                 options_dicts = [
+#                     {"text": opt.text, "is_correct": opt.is_correct} for opt in value
+#                 ]
+
+#                 # Verify at least one correct option
+#                 has_correct_option = any(opt.is_correct for opt in value)
+#                 if not has_correct_option:
+#                     raise HTTPException(
+#                         status_code=status.HTTP_400_BAD_REQUEST,
+#                         detail="At least one option must be marked as correct",
+#                     )
+
+#                 setattr(question, field, options_dicts)
+#                 changes[field] = "updated"
+#             elif value is not None:
+#                 setattr(question, field, value)
+#                 changes[field] = value if not isinstance(value, list) else "updated"
+
+#         # Update timestamp
+#         question.update_timestamp()
+#         await question.save()
+
+#         # Log admin action
+#         admin_action = AdminAction(
+#             admin_id=str(current_user.id),
+#             action_type=ActionType.UPDATE,
+#             target_collection="questions",
+#             target_id=str(question.id),
+#             changes=changes,
+#         )
+#         await admin_action.insert()
+
+#         return {
+#             "message": "Question updated successfully",
+#             "question_id": str(question.id),
+#         }
+
+#     except HTTPException as e:
+#         raise e
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Failed to update question: {str(e)}",
+#         )
+
+
+# # 3. Delete Question (soft delete by setting is_active=False)
+# @router.delete(
+#     "/questions/{question_id}",
+#     response_model=Dict[str, Any],
+#     summary="Delete a question",
+#     description="Admin endpoint to delete (deactivate) a question",
+# )
+# async def delete_question(
+#     question_id: str, current_user: User = Depends(admin_required)
+# ):
+#     """
+#     Delete a question (Admin only)
+
+#     This performs a soft delete by setting is_active=False.
+#     The question will no longer appear in searches but remains in the database.
+#     """
+#     try:
+#         # Find the question
+#         question = await Question.get(question_id)
+#         if not question:
+#             raise HTTPException(
+#                 status_code=status.HTTP_404_NOT_FOUND,
+#                 detail="Question not found",
+#             )
+
+#         # Soft delete by setting is_active=False
+#         question.is_active = False
+#         question.update_timestamp()
+#         await question.save()
+
+#         # Log admin action
+#         admin_action = AdminAction(
+#             admin_id=str(current_user.id),
+#             action_type=ActionType.DELETE,
+#             target_collection="questions",
+#             target_id=str(question.id),
+#             changes={"is_active": False},
+#         )
+#         await admin_action.insert()
+
+#         return {
+#             "message": "Question deleted successfully",
+#             "question_id": str(question.id),
+#         }
+
+#     except HTTPException as e:
+#         raise e
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Failed to delete question: {str(e)}",
+#         )
+
+
 @router.post(
-    "/questions",
-    response_model=Dict[str, Any],
+    "/import-questions",
+    response_model=dict,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a new question",
-    description="Admin endpoint to create a new question with multiple options",
-)
-async def create_question(
-    question_data: QuestionCreateRequest, current_user: User = Depends(admin_required)
-):
-    """
-    Create a new question (Admin only)
-
-    The request body must contain all the required question fields including options.
-    At least one option must be marked as correct.
-    """
-    try:
-        # Check if at least one option is marked as correct
-        has_correct_option = any(option.is_correct for option in question_data.options)
-        if not has_correct_option:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="At least one option must be marked as correct",
-            )
-
-        # Convert request model to document model
-        options_dicts = [
-            {"text": opt.text, "is_correct": opt.is_correct}
-            for opt in question_data.options
-        ]
-
-        # Create the question
-        new_question = Question(
-            title=question_data.title,
-            question_text=question_data.question_text,
-            question_type=question_data.question_type,
-            difficulty_level=question_data.difficulty_level,
-            exam_type=question_data.exam_type,
-            exam_year=question_data.exam_year,
-            options=options_dicts,
-            explanation=question_data.explanation,
-            subject=question_data.subject,
-            topic=question_data.topic,
-            tags=question_data.tags,
-            created_by=str(current_user.id),
-            is_active=True,
-        )
-
-        await new_question.insert()
-
-        # Log admin action
-        admin_action = AdminAction(
-            admin_id=str(current_user.id),
-            action_type=ActionType.CREATE,
-            target_collection="questions",
-            target_id=str(new_question.id),
-            changes={"action": "question_created"},
-        )
-        await admin_action.insert()
-
-        return {
-            "message": "Question created successfully",
-            "question_id": str(new_question.id),
-        }
-
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create question: {str(e)}",
-        )
-
-
-# 2. Update Question
-@router.put(
-    "/questions/{question_id}",
-    response_model=Dict[str, Any],
-    summary="Update an existing question",
-    description="Admin endpoint to update a question's details",
-)
-async def update_question(
-    question_id: str,
-    question_data: QuestionUpdateRequest,
-    current_user: User = Depends(admin_required),
-):
-    """
-    Update an existing question (Admin only)
-
-    Provide the fields you want to update. If options are provided, all options will be replaced.
-    """
-    try:
-        # Find the question
-        question = await Question.get(question_id)
-        if not question:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Question not found",
-            )
-
-        # Track changes for audit log
-        changes = {}
-
-        # Update fields if provided
-        for field, value in question_data.dict(exclude_unset=True).items():
-            if field == "options" and value is not None:
-                # Convert options to dictionary format
-                options_dicts = [
-                    {"text": opt.text, "is_correct": opt.is_correct} for opt in value
-                ]
-
-                # Verify at least one correct option
-                has_correct_option = any(opt.is_correct for opt in value)
-                if not has_correct_option:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="At least one option must be marked as correct",
-                    )
-
-                setattr(question, field, options_dicts)
-                changes[field] = "updated"
-            elif value is not None:
-                setattr(question, field, value)
-                changes[field] = value if not isinstance(value, list) else "updated"
-
-        # Update timestamp
-        question.update_timestamp()
-        await question.save()
-
-        # Log admin action
-        admin_action = AdminAction(
-            admin_id=str(current_user.id),
-            action_type=ActionType.UPDATE,
-            target_collection="questions",
-            target_id=str(question.id),
-            changes=changes,
-        )
-        await admin_action.insert()
-
-        return {
-            "message": "Question updated successfully",
-            "question_id": str(question.id),
-        }
-
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update question: {str(e)}",
-        )
-
-
-# 3. Delete Question (soft delete by setting is_active=False)
-@router.delete(
-    "/questions/{question_id}",
-    response_model=Dict[str, Any],
-    summary="Delete a question",
-    description="Admin endpoint to delete (deactivate) a question",
-)
-async def delete_question(
-    question_id: str, current_user: User = Depends(admin_required)
-):
-    """
-    Delete a question (Admin only)
-
-    This performs a soft delete by setting is_active=False.
-    The question will no longer appear in searches but remains in the database.
-    """
-    try:
-        # Find the question
-        question = await Question.get(question_id)
-        if not question:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Question not found",
-            )
-
-        # Soft delete by setting is_active=False
-        question.is_active = False
-        question.update_timestamp()
-        await question.save()
-
-        # Log admin action
-        admin_action = AdminAction(
-            admin_id=str(current_user.id),
-            action_type=ActionType.DELETE,
-            target_collection="questions",
-            target_id=str(question.id),
-            changes={"is_active": False},
-        )
-        await admin_action.insert()
-
-        return {
-            "message": "Question deleted successfully",
-            "question_id": str(question.id),
-        }
-
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete question: {str(e)}",
-        )
-
-
-# Add this to app/routers/admin.py
-@router.post(
-    "/create-admin",
-    response_model=Dict[str, Any],
-    summary="Create admin account",
-    description="Admin endpoint to create another admin account",
-)
-async def create_admin(
-    admin_data: UserRegisterRequest,
-    current_user: User = Depends(
-        admin_required
-    ),  # Ensures only admins can create admins
-):
-    """Create a new admin account (Admin only)"""
-    try:
-
-        # Create admin user
-        hashed_password = AuthService.get_password_hash(admin_data.password)
-        new_admin = User(
-            name=admin_data.name,
-            email=admin_data.email,
-            phone=admin_data.phone,
-            password_hash=hashed_password,
-            role=UserRole.ADMIN,  # Set role as ADMIN
-            is_active=True,
-            is_verified=True,  # Auto-verify admin accounts
-        )
-        await new_admin.insert()
-
-        # Log the admin creation
-        admin_action = AdminAction(
-            admin_id=str(current_user.id),
-            action_type=ActionType.CREATE,
-            target_collection="users",
-            target_id=str(new_admin.id),
-            changes={"action": "admin_created"},
-        )
-        await admin_action.insert()
-
-        return {"message": "Admin created successfully", "admin_id": str(new_admin.id)}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create admin: {str(e)}",
-        )
-
-
-@router.post(
-    "/tests/import-questions",
-    response_model=Dict[str, Any],
-    status_code=status.HTTP_200_OK,
-    summary="Import questions from CSV",
-    description="Admin endpoint to import questions from CSV file and create/update a test",
 )
 async def import_questions_from_csv(
     file: UploadFile = File(...),
@@ -957,12 +908,23 @@ async def import_questions_from_csv(
     exam_subcategory: str = Form(...),
     subject: str = Form(...),
     topic: Optional[str] = Form(None),
-    difficulty: DifficultyLevel = Form(DifficultyLevel.MEDIUM),
+    # difficulty: DifficultyLevel = Form(DifficultyLevel.MEDIUM),
     duration_minutes: int = Form(60),
     is_free: bool = Form(False),
     existing_test_id: Optional[str] = Form(None),
     current_user: User = Depends(admin_required),
 ):
+    print("\n=== Incoming Request Data ===")
+    print(f"Test Title: {test_title}")
+    print(f"Exam Category: {exam_category} (type: {type(exam_category)})")
+    print(f"Exam Subcategory: {exam_subcategory} (type: {type(exam_subcategory)})")
+    print(f"Subject: {subject} (type: {type(subject)})")
+    print(f"Topic: {topic} (type: {type(topic)})")
+    print(f"Difficulty: {difficulty} (type: {type(difficulty)})")
+    print(f"Duration: {duration_minutes} minutes (type: {type(duration_minutes)})")
+    print(f"Is Free: {is_free} (type: {type(is_free)})")
+    print(f"Existing Test ID: {existing_test_id} (type: {type(existing_test_id)})")
+    print(f"File: {file.filename} (type: {file.content_type})")
     """
     Import questions from CSV file and create/update a test.
 
@@ -978,167 +940,235 @@ async def import_questions_from_csv(
 
     Images can be included as URLs in any field.
     """
-    try:
-        # Read CSV file
-        contents = await file.read()
-        df = pd.read_csv(io.BytesIO(contents))
+    print("\n=== Starting import_questions_from_csv ===")
 
-        # Validate CSV structure
-        required_columns = [
-            "Question",
-            "Option A",
-            "Option B",
-            "Option C",
-            "Option D",
-            "Correct Answer",
-        ]
-        for col in required_columns:
-            if col not in df.columns:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Missing required column: {col}",
-                )
+    # try:
+    #     # Debug: Log incoming form data
+    #     print("\n=== Incoming Request Data ===")
+    #     print(f"Test Title: {test_title}")
+    #     print(f"Exam Category: {exam_category} (type: {type(exam_category)})")
+    #     print(f"Exam Subcategory: {exam_subcategory} (type: {type(exam_subcategory)})")
+    #     print(f"Subject: {subject} (type: {type(subject)})")
+    #     print(f"Topic: {topic} (type: {type(topic)})")
+    #     print(f"Difficulty: {difficulty} (type: {type(difficulty)})")
+    #     print(f"Duration: {duration_minutes} minutes (type: {type(duration_minutes)})")
+    #     print(f"Is Free: {is_free} (type: {type(is_free)})")
+    #     print(f"Existing Test ID: {existing_test_id} (type: {type(existing_test_id)})")
 
-        # Process questions
-        questions = []
-        errors = []
+    #     print("\n=== File Info ===")
+    #     print(f"Filename: {file.filename} (type: {type(file.filename)})")
+    #     print(f"Content Type: {file.content_type} (type: {type(file.content_type)})")
 
-        for idx, row in df.iterrows():
-            try:
-                # Extract image URLs from question text
-                question_text, question_images = extract_image_urls(row["Question"])
+    #     # Check if file is provided
+    #     if not file:
+    #         raise HTTPException(
+    #             status_code=status.HTTP_400_BAD_REQUEST, detail="No file provided"
+    #         )
+    #     else:
+    #         print(f"File provided: {file.filename} (type: {type(file.filename)})")
+    #     # # Read and validate file content
+    #     # try:
+    #     #     contents = await file.read()
+    #     #     if not contents:
+    #     #         raise HTTPException(
+    #     #             status_code=status.HTTP_400_BAD_REQUEST,
+    #     #             detail="Empty file provided",
+    #     #         )
 
-                # Process options and extract image URLs
-                options = []
-                for opt in ["A", "B", "C", "D"]:
-                    option_text, option_images = extract_image_urls(
-                        row[f"Option {opt}"]
-                    )
-                    is_correct = str(row["Correct Answer"]).strip().upper() == opt
+    #     #     print(
+    #     #         f"\n=== First 200 chars of file ===\n{contents[:200].decode('utf-8', errors='replace')}..."
+    #     #     )
 
-                    option_data = {
-                        "text": option_text,
-                        "is_correct": is_correct,
-                    }
+    #     #     # Try to read CSV with different encodings if needed
+    #     #     try:
+    #     #         df = pd.read_csv(io.BytesIO(contents))
+    #     #     except Exception as e:
+    #     #         print(f"Error reading CSV with default encoding: {str(e)}")
+    #     #         # Try with different encodings
+    #     #         for encoding in ["utf-8", "latin1", "iso-8859-1", "cp1252"]:
+    #     #             try:
+    #     #                 df = pd.read_csv(io.BytesIO(contents), encoding=encoding)
+    #     #                 print(f"Successfully read CSV with {encoding} encoding")
+    #     #                 break
+    #     #             except:
+    #     #                 continue
+    #     #         else:
+    #     #             raise HTTPException(
+    #     #                 status_code=status.HTTP_400_BAD_REQUEST,
+    #     #                 detail="Could not read CSV file with any standard encoding",
+    #     #             )
 
-                    # Add image URLs if present
-                    if option_images:
-                        option_data["image_urls"] = option_images
+    #     #     print("\n=== CSV Headers ===")
+    #     #     print(df.columns.tolist())
+    #     #     print("\n=== First row ===")
+    #     #     print(df.iloc[0].to_dict() if not df.empty else "Empty DataFrame")
 
-                    options.append(option_data)
+    #     # except Exception as e:
+    #     #     print(f"Error processing file: {str(e)}")
+    #     #     raise HTTPException(
+    #     #         status_code=status.HTTP_400_BAD_REQUEST,
+    #     #         detail=f"Error processing file: {str(e)}",
+    #     #     )
 
-                # Extract explanation and remarks with any image URLs
-                explanation, explanation_images = extract_image_urls(
-                    row.get("Explanation", "")
-                )
-                remarks, remarks_images = extract_image_urls(row.get("Remarks", ""))
+    #     # Validate CSV structure
+    #     required_columns = [
+    #         "Question",
+    #         "Option A",
+    #         "Option B",
+    #         "Option C",
+    #         "Option D",
+    #         "Correct Answer",
+    #     ]
+    #     print("Validated")
+    #     for col in required_columns:
+    #         if col not in df.columns:
+    #             raise HTTPException(
+    #                 status_code=status.HTTP_400_BAD_REQUEST,
+    #                 detail=f"Missing required column: {col}",
+    #             )
 
-                # Create question object
-                question = Question(
-                    title=question_text[:50]
-                    + ("..." if len(question_text) > 50 else ""),
-                    question_text=question_text,
-                    question_type=QuestionType.MCQ,
-                    difficulty_level=difficulty,
-                    exam_type=exam_subcategory,
-                    options=options,
-                    explanation=explanation,
-                    subject=subject,
-                    topic=topic or "General",
-                    created_by=str(current_user.id),
-                    tags=[exam_category.value, exam_subcategory, subject],
-                    is_active=True,
-                )
+    #     # Process questions
+    #     questions = []
+    #     errors = []
 
-                # Add image URLs to question metadata
-                question_metadata = {}
-                if question_images:
-                    question_metadata["question_images"] = question_images
-                if explanation_images:
-                    question_metadata["explanation_images"] = explanation_images
-                if remarks_images:
-                    question_metadata["remarks_images"] = remarks_images
-                if remarks:
-                    question_metadata["remarks"] = remarks
+    #     for idx, row in df.iterrows():
+    #         try:
+    #             print("Start")
+    #             print(idx, row)
+    #             # Extract image URLs from question text
+    #             # question_text, question_images = extract_image_urls(row["Question"])
 
-                # Store metadata if any
-                if question_metadata:
-                    # You might need to add a metadata field to your Question model
-                    # This is just a suggestion for where to store additional info
-                    question.metadata = question_metadata
+    #             # Process options and extract image URLs
+    #             # options = []
+    #             # for opt in ["A", "B", "C", "D"]:
+    #             #     # option_text, option_images = extract_image_urls(
+    #             #         row[f"Option {opt}"]
+    #             #     )
+    #             #     is_correct = str(row["Correct Answer"]).strip().upper() == opt
 
-                # Insert question into database
-                await question.insert()
-                questions.append(question)
+    #             # option_data = {
+    #             #     "text": option_text,
+    #             #     "is_correct": is_correct,
+    #             # }
 
-            except Exception as e:
-                errors.append(f"Error processing question at row {idx+1}: {str(e)}")
+    #             # # Add image URLs if present
+    #             # if option_images:
+    #             #     option_data["image_urls"] = option_images
 
-        # Handle test series creation or update
-        test_series = None
-        if existing_test_id:
-            # Update existing test
-            test_series = await TestSeries.get(existing_test_id)
-            if not test_series:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Test with ID {existing_test_id} not found",
-                )
+    #             # options.append(option_data)
 
-            # Add new questions to existing test
-            question_ids = [str(q.id) for q in questions]
-            test_series.question_ids.extend(question_ids)
-            test_series.total_questions = len(test_series.question_ids)
-            await test_series.save()
-        else:
-            # Create new test series
-            test_series = TestSeries(
-                title=test_title,
-                description=f"{test_title} for {exam_subcategory}",
-                exam_category=exam_category.value,
-                exam_subcategory=exam_subcategory,
-                subject=subject,
-                total_questions=len(questions),
-                duration_minutes=duration_minutes,
-                max_score=len(questions),  # 1 point per question
-                difficulty=difficulty,
-                question_ids=[str(q.id) for q in questions],
-                is_free=is_free,
-                created_by=str(current_user.id),
-            )
-            await test_series.insert()
+    #             # # Extract explanation and remarks with any image URLs
+    #             # explanation, explanation_images = extract_image_urls(
+    #             #     row.get("Explanation", "")
+    #             # )
+    #             # remarks, remarks_images = extract_image_urls(row.get("Remarks", ""))
 
-        # Log admin action
-        admin_action = AdminAction(
-            admin_id=str(current_user.id),
-            action_type=(
-                ActionType.CREATE if not existing_test_id else ActionType.UPDATE
-            ),
-            target_collection="test_series",
-            target_id=str(test_series.id),
-            changes={
-                "action": "import_questions",
-                "questions_added": len(questions),
-                "source": file.filename,
-            },
-        )
-        await admin_action.insert()
+    #             # # Create question object
+    # question = Question(
+    #             #     title=question_text[:50]
+    #             #     + ("..." if len(question_text) > 50 else ""),
+    #             #     question_text=question_text,
+    #             #     question_type=QuestionType.MCQ,
+    #             #     difficulty_level=difficulty,
+    #             #     exam_type=exam_subcategory,
+    #             #     options=options,
+    #             #     explanation=explanation,
+    #             #     subject=subject,
+    #             #     topic=topic or "General",
+    #             #     created_by=str(current_user.id),
+    #             #     tags=[exam_category.value, exam_subcategory, subject],
+    #             #     is_active=True,
+    #             # )
 
-        return {
-            "message": f"Successfully imported {len(questions)} questions",
-            "test_id": str(test_series.id),
-            "test_title": test_series.title,
-            "questions_imported": len(questions),
-            "errors": errors if errors else None,
-        }
+    #             # # Add image URLs to question metadata
+    #             # question_metadata = {}
+    #             # if question_images:
+    #             #     question_metadata["question_images"] = question_images
+    #             # if explanation_images:
+    #             #     question_metadata["explanation_images"] = explanation_images
+    #             # if remarks_images:
+    #             #     question_metadata["remarks_images"] = remarks_images
+    #             # if remarks:
+    #             #     question_metadata["remarks"] = remarks
 
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to import questions: {str(e)}",
-        )
+    #             # # Store metadata if any
+    #             # # if question_metadata:
+    #             #     # You might need to add a metadata field to your Question model
+    #             #     # This is just a suggestion for where to store additional info
+    #             #     # question.metadata = question_metadata
+
+    #             # # Insert question into database
+    #             # await question.insert()
+    #             # questions.append(question)
+
+    #         except Exception as e:
+    #             errors.append(f"Error processing question at row {idx+1}: {str(e)}")
+
+    #     # Handle test series creation or update
+    #     test_series = None
+    #     if existing_test_id:
+    #         # Update existing test
+    #         test_series = await TestSeries.get(existing_test_id)
+    #         if not test_series:
+    #             raise HTTPException(
+    #                 status_code=status.HTTP_404_NOT_FOUND,
+    #                 detail=f"Test with ID {existing_test_id} not found",
+    #             )
+
+    #         # Add new questions to existing test
+    #         question_ids = [str(q.id) for q in questions]
+    #         test_series.question_ids.extend(question_ids)
+    #         test_series.total_questions = len(test_series.question_ids)
+    #         await test_series.save()
+    #     else:
+    #         # Create new test series
+    #         test_series = TestSeries(
+    #             title=test_title,
+    #             description=f"{test_title} for {exam_subcategory}",
+    #             exam_category=exam_category.value,
+    #             exam_subcategory=exam_subcategory,
+    #             subject=subject,
+    #             total_questions=len(questions),
+    #             duration_minutes=duration_minutes,
+    #             max_score=len(questions),  # 1 point per question
+    #             difficulty=difficulty,
+    #             question_ids=[str(q.id) for q in questions],
+    #             is_free=is_free,
+    #             created_by=str(current_user.id),
+    #         )
+    #         await test_series.insert()
+
+    #     # Log admin action
+    #     admin_action = AdminAction(
+    #         admin_id=str(current_user.id),
+    #         action_type=(
+    #             ActionType.CREATE if not existing_test_id else ActionType.UPDATE
+    #         ),
+    #         target_collection="test_series",
+    #         target_id=str(test_series.id),
+    #         changes={
+    #             "action": "import_questions",
+    #             "questions_added": len(questions),
+    #             "source": file.filename,
+    #         },
+    #     )
+    #     await admin_action.insert()
+
+    #     return {
+    #         "message": f"Successfully imported {len(questions)} questions",
+    #         "test_id": str(test_series.id),
+    #         "test_title": test_series.title,
+    #         "questions_imported": len(questions),
+    #         "errors": errors if errors else None,
+    #     }
+
+    # except HTTPException as e:
+    #     raise e
+    # except Exception as e:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    #         detail=f"Failed to import questions: {str(e)}",
+    #     )
 
 
 # Also add an endpoint to view test details including questions
@@ -1202,4 +1232,50 @@ async def get_test_questions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve test questions: {str(e)}",
+        )
+
+
+@router.post(
+    "/create-admin",
+    response_model=Dict[str, Any],
+    summary="Create admin account",
+    description="Admin endpoint to create another admin account",
+)
+async def create_admin(
+    admin_data: UserRegisterRequest,
+    current_user: User = Depends(
+        admin_required
+    ),  # Ensures only admins can create admins
+):
+    """Create a new admin account (Admin only)"""
+    try:
+
+        # Create admin user
+        hashed_password = AuthService.get_password_hash(admin_data.password)
+        new_admin = User(
+            name=admin_data.name,
+            email=admin_data.email,
+            phone=admin_data.phone,
+            password_hash=hashed_password,
+            role=UserRole.ADMIN,  # Set role as ADMIN
+            is_active=True,
+            is_verified=True,  # Auto-verify admin accounts
+        )
+        await new_admin.insert()
+
+        # Log the admin creation
+        admin_action = AdminAction(
+            admin_id=str(current_user.id),
+            action_type=ActionType.CREATE,
+            target_collection="users",
+            target_id=str(new_admin.id),
+            changes={"action": "admin_created"},
+        )
+        await admin_action.insert()
+
+        return {"message": "Admin created successfully", "admin_id": str(new_admin.id)}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create admin: {str(e)}",
         )
