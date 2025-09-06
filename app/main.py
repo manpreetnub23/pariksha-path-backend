@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Pariksha Path API",
@@ -73,6 +74,10 @@ app.include_router(analytics_router)
 async def root():
     return {"message": "Coaching Institute API is running!", "status": "healthy"}
 
+@app.get("/debug-init")
+async def debug_init():
+    await init_db()
+    return {"message": "init_db called manually"}
 
 @app.get("/health")
 async def health_check():
