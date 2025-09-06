@@ -180,7 +180,7 @@ class AuthService:
     @staticmethod
     async def authenticate_user(email: str, password: str) -> Optional[User]:
         """Authenticate user with email and password"""
-        print("DEBUG ENV - DATABASE_URL:", os.getenv("DATABASE_URL"))
+        print("DEBUG ENV - DATABASE_URL:", os.getenv("MONGO_URI"))
         print("DEBUG ENV - LOGIN_OTP_REQUIRED:", os.getenv("LOGIN_OTP_REQUIRED"))
         user = await User.find_one({"email": email})
         if not user:
