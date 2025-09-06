@@ -16,12 +16,19 @@ from .models.result import Result
 from .models.exam_category_structure import ExamCategoryStructure
 from .config import settings
 from urllib.parse import urlparse
+from motor.motor_asyncio import AsyncIOMotorClient
 
+# Global client (singleton)
+client: AsyncIOMotorClient | None = None
 
 async def init_db():
     try:
+        global client
+        if client is None:
+            client = AsyncIOMotorClient(settings.MONGO_URI)
+            
         # create motor client using MONGO_URI from settings
-        client = motor.motor_asyncio.AsyncIOMotorClient(settings.MONGO_URI)
+        # client = motor.motor_asyncio.AsyncIOMotorClient(settings.MONGO_URI)
 
         # Test the connection
         await client.admin.command("ping")
