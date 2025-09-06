@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import io
 import re
+import pandas as pd
 from typing import List, Optional, Dict, Any
 
 from fastapi import (
@@ -12,10 +13,11 @@ from fastapi import (
     UploadFile,
     File,
     Form,
+    Request,
 )
 from pydantic import BaseModel, EmailStr
 
-from ..models.test import TestSeries
+from ..models.test import TestSeries, TestDifficulty
 from ..models.question import Question, QuestionType, DifficultyLevel
 from ..models.admin_action import AdminAction, ActionType
 from ..models.user import User
@@ -896,6 +898,37 @@ async def get_student_analytics(
 #         )
 
 
+# @router.post("/import-questions")
+# async def import_questions_from_csv(request: Request):
+#     form = await request.form()
+#     print(form)
+
+# @router.post(
+#     "/import-questions",
+#     response_model=dict,
+#     status_code=status.HTTP_201_CREATED,
+# )
+# async def import_questions_from_csv(
+#     file: UploadFile = File(...),
+#     test_title: str = Form(...),
+#     exam_category: str = Form(...),
+#     exam_subcategory: str = Form(...),
+#     subject: str = Form(...),
+#     topic: Optional[str] = Form(None),
+#     difficulty: str = Form("MEDIUM"),
+#     duration_minutes: int = Form(60),
+#     is_free: str = Form("false"),
+#     existing_test_id: Optional[str] = Form(None),
+#     current_user: User = Depends(admin_required),
+# ):
+#     # Normalize raw inputs
+#     raw_exam_category = exam_category.strip()
+#     raw_difficulty = difficulty.strip()
+#     raw_is_free = is_free.strip().lower()
+
+#     # Case-insensitive enum matching
+
+
 @router.post(
     "/import-questions",
     response_model=dict,
@@ -904,27 +937,38 @@ async def get_student_analytics(
 async def import_questions_from_csv(
     file: UploadFile = File(...),
     test_title: str = Form(...),
-    exam_category: ExamCategory = Form(...),
+    exam_category: str = Form(...),
     exam_subcategory: str = Form(...),
     subject: str = Form(...),
     topic: Optional[str] = Form(None),
-    # difficulty: DifficultyLevel = Form(DifficultyLevel.MEDIUM),
+    difficulty: str = Form("MEDIUM"),
     duration_minutes: int = Form(60),
-    is_free: bool = Form(False),
+    is_free: str = Form("false"),
     existing_test_id: Optional[str] = Form(None),
     current_user: User = Depends(admin_required),
 ):
-    print("\n=== Incoming Request Data ===")
-    print(f"Test Title: {test_title}")
-    print(f"Exam Category: {exam_category} (type: {type(exam_category)})")
-    print(f"Exam Subcategory: {exam_subcategory} (type: {type(exam_subcategory)})")
-    print(f"Subject: {subject} (type: {type(subject)})")
-    print(f"Topic: {topic} (type: {type(topic)})")
-    print(f"Difficulty: {difficulty} (type: {type(difficulty)})")
-    print(f"Duration: {duration_minutes} minutes (type: {type(duration_minutes)})")
-    print(f"Is Free: {is_free} (type: {type(is_free)})")
-    print(f"Existing Test ID: {existing_test_id} (type: {type(existing_test_id)})")
-    print(f"File: {file.filename} (type: {file.content_type})")
+
+    def normalize_enum(value: str, enum_cls):
+        for member in enum_cls:
+            if value.lower() == member.value.lower():
+                return member
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid {enum_cls.__name__}: {value}. "
+            f"Allowed: {[m.value for m in enum_cls]}",
+        )
+
+    # Normalize raw inputs
+    raw_exam_category = exam_category.strip()
+    raw_difficulty = difficulty.strip()
+    raw_is_free = is_free.strip().lower()
+
+    # Convert to enum types
+    exam_category_enum = normalize_enum(raw_exam_category, ExamCategory)
+    difficulty_enum = normalize_enum(raw_difficulty, DifficultyLevel)
+    test_difficulty_enum = normalize_enum(raw_difficulty, TestDifficulty)
+    is_free_bool = raw_is_free in ("true", "1", "yes", "on")
+
     """
     Import questions from CSV file and create/update a test.
 
@@ -942,233 +986,235 @@ async def import_questions_from_csv(
     """
     print("\n=== Starting import_questions_from_csv ===")
 
-    # try:
-    #     # Debug: Log incoming form data
-    #     print("\n=== Incoming Request Data ===")
-    #     print(f"Test Title: {test_title}")
-    #     print(f"Exam Category: {exam_category} (type: {type(exam_category)})")
-    #     print(f"Exam Subcategory: {exam_subcategory} (type: {type(exam_subcategory)})")
-    #     print(f"Subject: {subject} (type: {type(subject)})")
-    #     print(f"Topic: {topic} (type: {type(topic)})")
-    #     print(f"Difficulty: {difficulty} (type: {type(difficulty)})")
-    #     print(f"Duration: {duration_minutes} minutes (type: {type(duration_minutes)})")
-    #     print(f"Is Free: {is_free} (type: {type(is_free)})")
-    #     print(f"Existing Test ID: {existing_test_id} (type: {type(existing_test_id)})")
+    # For now, return a success response since the actual CSV processing is commented out
 
-    #     print("\n=== File Info ===")
-    #     print(f"Filename: {file.filename} (type: {type(file.filename)})")
-    #     print(f"Content Type: {file.content_type} (type: {type(file.content_type)})")
+    try:
+        # Debug: Log incoming form data
+        print("\n=== Incoming Request Data ===")
+        print(f"Test Title: {test_title}")
+        print(f"Exam Category: {exam_category} (type: {type(exam_category)})")
+        print(f"Exam Subcategory: {exam_subcategory} (type: {type(exam_subcategory)})")
+        print(f"Subject: {subject} (type: {type(subject)})")
+        print(f"Topic: {topic} (type: {type(topic)})")
+        print(f"Difficulty: {difficulty} (type: {type(difficulty)})")
+        print(f"Duration: {duration_minutes} minutes (type: {type(duration_minutes)})")
+        print(f"Is Free: {is_free} (type: {type(is_free)})")
+        print(f"Existing Test ID: {existing_test_id} (type: {type(existing_test_id)})")
 
-    #     # Check if file is provided
-    #     if not file:
-    #         raise HTTPException(
-    #             status_code=status.HTTP_400_BAD_REQUEST, detail="No file provided"
-    #         )
-    #     else:
-    #         print(f"File provided: {file.filename} (type: {type(file.filename)})")
-    #     # # Read and validate file content
-    #     # try:
-    #     #     contents = await file.read()
-    #     #     if not contents:
-    #     #         raise HTTPException(
-    #     #             status_code=status.HTTP_400_BAD_REQUEST,
-    #     #             detail="Empty file provided",
-    #     #         )
+        print("\n=== File Info ===")
+        print(f"Filename: {file.filename} (type: {type(file.filename)})")
+        print(f"Content Type: {file.content_type} (type: {type(file.content_type)})")
 
-    #     #     print(
-    #     #         f"\n=== First 200 chars of file ===\n{contents[:200].decode('utf-8', errors='replace')}..."
-    #     #     )
+        # Check if file is provided
+        if not file:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="No file provided"
+            )
+        else:
+            print(f"File provided: {file.filename} (type: {type(file.filename)})")
+        # Read and validate file content
+        try:
+            contents = await file.read()
+            if not contents:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Empty file provided",
+                )
 
-    #     #     # Try to read CSV with different encodings if needed
-    #     #     try:
-    #     #         df = pd.read_csv(io.BytesIO(contents))
-    #     #     except Exception as e:
-    #     #         print(f"Error reading CSV with default encoding: {str(e)}")
-    #     #         # Try with different encodings
-    #     #         for encoding in ["utf-8", "latin1", "iso-8859-1", "cp1252"]:
-    #     #             try:
-    #     #                 df = pd.read_csv(io.BytesIO(contents), encoding=encoding)
-    #     #                 print(f"Successfully read CSV with {encoding} encoding")
-    #     #                 break
-    #     #             except:
-    #     #                 continue
-    #     #         else:
-    #     #             raise HTTPException(
-    #     #                 status_code=status.HTTP_400_BAD_REQUEST,
-    #     #                 detail="Could not read CSV file with any standard encoding",
-    #     #             )
+            print(
+                f"\n=== First 200 chars of file ===\n{contents[:200].decode('utf-8', errors='replace')}..."
+            )
 
-    #     #     print("\n=== CSV Headers ===")
-    #     #     print(df.columns.tolist())
-    #     #     print("\n=== First row ===")
-    #     #     print(df.iloc[0].to_dict() if not df.empty else "Empty DataFrame")
+            # Try to read CSV with different encodings if needed
+            try:
+                df = pd.read_csv(io.BytesIO(contents))
+            except Exception as e:
+                print(f"Error reading CSV with default encoding: {str(e)}")
+                # Try with different encodings
+                for encoding in ["utf-8", "latin1", "iso-8859-1", "cp1252"]:
+                    try:
+                        df = pd.read_csv(io.BytesIO(contents), encoding=encoding)
+                        print(f"Successfully read CSV with {encoding} encoding")
+                        break
+                    except:
+                        continue
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Could not read CSV file with any standard encoding",
+                    )
 
-    #     # except Exception as e:
-    #     #     print(f"Error processing file: {str(e)}")
-    #     #     raise HTTPException(
-    #     #         status_code=status.HTTP_400_BAD_REQUEST,
-    #     #         detail=f"Error processing file: {str(e)}",
-    #     #     )
+            print("\n=== CSV Headers ===")
+            print(df.columns.tolist())
+            print("\n=== First row ===")
+            print(df.iloc[0].to_dict() if not df.empty else "Empty DataFrame")
 
-    #     # Validate CSV structure
-    #     required_columns = [
-    #         "Question",
-    #         "Option A",
-    #         "Option B",
-    #         "Option C",
-    #         "Option D",
-    #         "Correct Answer",
-    #     ]
-    #     print("Validated")
-    #     for col in required_columns:
-    #         if col not in df.columns:
-    #             raise HTTPException(
-    #                 status_code=status.HTTP_400_BAD_REQUEST,
-    #                 detail=f"Missing required column: {col}",
-    #             )
+        except Exception as e:
+            print(f"Error processing file: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Error processing file: {str(e)}",
+            )
 
-    #     # Process questions
-    #     questions = []
-    #     errors = []
+        # Validate CSV structure
+        required_columns = [
+            "Question",
+            "Option A",
+            "Option B",
+            "Option C",
+            "Option D",
+            "Correct Answer",
+        ]
+        print("Validated")
+        for col in required_columns:
+            if col not in df.columns:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Missing required column: {col}",
+                )
 
-    #     for idx, row in df.iterrows():
-    #         try:
-    #             print("Start")
-    #             print(idx, row)
-    #             # Extract image URLs from question text
-    #             # question_text, question_images = extract_image_urls(row["Question"])
+        # Process questions
+        questions = []
+        errors = []
 
-    #             # Process options and extract image URLs
-    #             # options = []
-    #             # for opt in ["A", "B", "C", "D"]:
-    #             #     # option_text, option_images = extract_image_urls(
-    #             #         row[f"Option {opt}"]
-    #             #     )
-    #             #     is_correct = str(row["Correct Answer"]).strip().upper() == opt
+        for idx, row in df.iterrows():
+            try:
+                print("Start")
+                print(idx, row)
+                # Extract image URLs from question text
+                question_text, question_images = extract_image_urls(row["Question"])
 
-    #             # option_data = {
-    #             #     "text": option_text,
-    #             #     "is_correct": is_correct,
-    #             # }
+                # Process options and extract image URLs
+                options = []
+                for opt in ["A", "B", "C", "D"]:
+                    option_text, option_images = extract_image_urls(
+                        row[f"Option {opt}"]
+                    )
+                    is_correct = str(row["Correct Answer"]).strip().upper() == opt
 
-    #             # # Add image URLs if present
-    #             # if option_images:
-    #             #     option_data["image_urls"] = option_images
+                option_data = {
+                    "text": option_text,
+                    "is_correct": is_correct,
+                }
 
-    #             # options.append(option_data)
+                # Add image URLs if present
+                if option_images:
+                    option_data["image_urls"] = option_images
 
-    #             # # Extract explanation and remarks with any image URLs
-    #             # explanation, explanation_images = extract_image_urls(
-    #             #     row.get("Explanation", "")
-    #             # )
-    #             # remarks, remarks_images = extract_image_urls(row.get("Remarks", ""))
+                options.append(option_data)
 
-    #             # # Create question object
-    # question = Question(
-    #             #     title=question_text[:50]
-    #             #     + ("..." if len(question_text) > 50 else ""),
-    #             #     question_text=question_text,
-    #             #     question_type=QuestionType.MCQ,
-    #             #     difficulty_level=difficulty,
-    #             #     exam_type=exam_subcategory,
-    #             #     options=options,
-    #             #     explanation=explanation,
-    #             #     subject=subject,
-    #             #     topic=topic or "General",
-    #             #     created_by=str(current_user.id),
-    #             #     tags=[exam_category.value, exam_subcategory, subject],
-    #             #     is_active=True,
-    #             # )
+                # Extract explanation and remarks with any image URLs
+                explanation, explanation_images = extract_image_urls(
+                    row.get("Explanation", "")
+                )
+                remarks, remarks_images = extract_image_urls(row.get("Remarks", ""))
 
-    #             # # Add image URLs to question metadata
-    #             # question_metadata = {}
-    #             # if question_images:
-    #             #     question_metadata["question_images"] = question_images
-    #             # if explanation_images:
-    #             #     question_metadata["explanation_images"] = explanation_images
-    #             # if remarks_images:
-    #             #     question_metadata["remarks_images"] = remarks_images
-    #             # if remarks:
-    #             #     question_metadata["remarks"] = remarks
+                # Create question object
+                question = Question(
+                    title=question_text[:50]
+                    + ("..." if len(question_text) > 50 else ""),
+                    question_text=question_text,
+                    question_type=QuestionType.MCQ,
+                    difficulty_level=difficulty_enum,
+                    exam_type=exam_subcategory,
+                    options=options,
+                    explanation=explanation,
+                    subject=subject,
+                    topic=topic or "General",
+                    created_by=str(current_user.id),
+                    tags=[exam_category_enum.value, exam_subcategory, subject],
+                    is_active=True,
+                )
 
-    #             # # Store metadata if any
-    #             # # if question_metadata:
-    #             #     # You might need to add a metadata field to your Question model
-    #             #     # This is just a suggestion for where to store additional info
-    #             #     # question.metadata = question_metadata
+                # Add image URLs to question metadata
+                question_metadata = {}
+                if question_images:
+                    question_metadata["question_images"] = question_images
+                if explanation_images:
+                    question_metadata["explanation_images"] = explanation_images
+                if remarks_images:
+                    question_metadata["remarks_images"] = remarks_images
+                if remarks:
+                    question_metadata["remarks"] = remarks
 
-    #             # # Insert question into database
-    #             # await question.insert()
-    #             # questions.append(question)
+                # Store metadata if any
+                # if question_metadata:
+                # You might need to add a metadata field to your Question model
+                # This is just a suggestion for where to store additional info
+                # question.metadata = question_metadata
 
-    #         except Exception as e:
-    #             errors.append(f"Error processing question at row {idx+1}: {str(e)}")
+                # Insert question into database
+                await question.insert()
+                questions.append(question)
 
-    #     # Handle test series creation or update
-    #     test_series = None
-    #     if existing_test_id:
-    #         # Update existing test
-    #         test_series = await TestSeries.get(existing_test_id)
-    #         if not test_series:
-    #             raise HTTPException(
-    #                 status_code=status.HTTP_404_NOT_FOUND,
-    #                 detail=f"Test with ID {existing_test_id} not found",
-    #             )
+            except Exception as e:
+                errors.append(f"Error processing question at row {idx+1}: {str(e)}")
 
-    #         # Add new questions to existing test
-    #         question_ids = [str(q.id) for q in questions]
-    #         test_series.question_ids.extend(question_ids)
-    #         test_series.total_questions = len(test_series.question_ids)
-    #         await test_series.save()
-    #     else:
-    #         # Create new test series
-    #         test_series = TestSeries(
-    #             title=test_title,
-    #             description=f"{test_title} for {exam_subcategory}",
-    #             exam_category=exam_category.value,
-    #             exam_subcategory=exam_subcategory,
-    #             subject=subject,
-    #             total_questions=len(questions),
-    #             duration_minutes=duration_minutes,
-    #             max_score=len(questions),  # 1 point per question
-    #             difficulty=difficulty,
-    #             question_ids=[str(q.id) for q in questions],
-    #             is_free=is_free,
-    #             created_by=str(current_user.id),
-    #         )
-    #         await test_series.insert()
+        # Handle test series creation or update
+        test_series = None
+        if existing_test_id:
+            # Update existing test
+            test_series = await TestSeries.get(existing_test_id)
+            if not test_series:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Test with ID {existing_test_id} not found",
+                )
 
-    #     # Log admin action
-    #     admin_action = AdminAction(
-    #         admin_id=str(current_user.id),
-    #         action_type=(
-    #             ActionType.CREATE if not existing_test_id else ActionType.UPDATE
-    #         ),
-    #         target_collection="test_series",
-    #         target_id=str(test_series.id),
-    #         changes={
-    #             "action": "import_questions",
-    #             "questions_added": len(questions),
-    #             "source": file.filename,
-    #         },
-    #     )
-    #     await admin_action.insert()
+            # Add new questions to existing test
+            question_ids = [str(q.id) for q in questions]
+            test_series.question_ids.extend(question_ids)
+            test_series.total_questions = len(test_series.question_ids)
+            await test_series.save()
+        else:
+            # Create new test series
+            test_series = TestSeries(
+                title=test_title,
+                description=f"{test_title} for {exam_subcategory}",
+                exam_category=exam_category_enum.value,
+                exam_subcategory=exam_subcategory,
+                subject=subject,
+                total_questions=len(questions),
+                duration_minutes=duration_minutes,
+                max_score=len(questions),  # 1 point per question
+                difficulty=test_difficulty_enum,
+                question_ids=[str(q.id) for q in questions],
+                is_free=is_free_bool,
+                created_by=str(current_user.id),
+            )
+            await test_series.insert()
 
-    #     return {
-    #         "message": f"Successfully imported {len(questions)} questions",
-    #         "test_id": str(test_series.id),
-    #         "test_title": test_series.title,
-    #         "questions_imported": len(questions),
-    #         "errors": errors if errors else None,
-    #     }
+        # Log admin action
+        admin_action = AdminAction(
+            admin_id=str(current_user.id),
+            action_type=(
+                ActionType.CREATE if not existing_test_id else ActionType.UPDATE
+            ),
+            target_collection="test_series",
+            target_id=str(test_series.id),
+            changes={
+                "action": "import_questions",
+                "questions_added": len(questions),
+                "source": file.filename,
+            },
+        )
+        await admin_action.insert()
 
-    # except HTTPException as e:
-    #     raise e
-    # except Exception as e:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-    #         detail=f"Failed to import questions: {str(e)}",
-    #     )
+        return {
+            "message": f"Successfully imported {len(questions)} questions",
+            "test_id": str(test_series.id),
+            "test_title": test_series.title,
+            "questions_imported": len(questions),
+            "errors": errors if errors else None,
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to import questions: {str(e)}",
+        )
 
 
 # Also add an endpoint to view test details including questions
