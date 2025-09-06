@@ -259,7 +259,7 @@ async def get_enrolled_courses(current_user: User = Depends(get_current_user)):
             detail=f"Failed to retrieve enrolled courses: {str(e)}",
         )
 
-
+    
 # Endpoint to get all courses (public)
 @router.get(
     "/",

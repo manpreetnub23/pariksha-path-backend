@@ -46,13 +46,13 @@ app = FastAPI(
 # Configure CORS
 origins = [
     "http://localhost:3000",  # Your local frontend
-    "https://pariksha-path2-0.vercel.app/",  # Your production frontend
+    "https://pariksha-path2-0.vercel.app",  # Your production frontend
     # Add any other frontend URLs you need
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=origins,  # Configure appropriately for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
