@@ -9,6 +9,7 @@ from .models.user import User
 from .models.enums import UserRole, ExamCategory
 from .config import settings
 from typing import Dict, Any
+import os
 
 # import secrets
 from .services.otp_service import OTPService
@@ -179,6 +180,8 @@ class AuthService:
     @staticmethod
     async def authenticate_user(email: str, password: str) -> Optional[User]:
         """Authenticate user with email and password"""
+        print("DEBUG ENV - DATABASE_URL:", os.getenv("DATABASE_URL"))
+        print("DEBUG ENV - LOGIN_OTP_REQUIRED:", os.getenv("LOGIN_OTP_REQUIRED"))
         user = await User.find_one({"email": email})
         if not user:
             return None

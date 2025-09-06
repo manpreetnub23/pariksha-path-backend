@@ -18,8 +18,6 @@ from typing import Dict, Any
 from datetime import datetime, timezone
 from ..auth import ACCESS_TOKEN_EXPIRE_MINUTES
 from ..dependencies import get_current_user, security
-import logging
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
@@ -166,7 +164,6 @@ async def login(login_data: UserLoginRequest):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.exception("Unexpected error during login")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Login failed: {str(e)}",
