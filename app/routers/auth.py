@@ -100,10 +100,12 @@ async def login(login_data: UserLoginRequest):
     try:
         from ..config import settings
 
+        print("hello tumhari maa badi cute")
         user = await AuthService.authenticate_user(
             login_data.email, login_data.password
         )
 
+        print("chalaak lomdi ")
         if not user:
             logger.exception("Unexpected error during login")
             raise HTTPException(
@@ -113,6 +115,7 @@ async def login(login_data: UserLoginRequest):
             )
 
         if not user.is_active:
+            logger.exception("Unexpected error during login")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Account is deactivated. Please contact admin.",
@@ -168,6 +171,7 @@ async def login(login_data: UserLoginRequest):
     except HTTPException as e:
         raise e
     except Exception as e:
+        logger.exception("Unexpected error during login")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Login failed: {str(e)}",

@@ -183,6 +183,7 @@ class AuthService:
         print("DEBUG ENV - DATABASE_URL:", os.getenv("MONGO_URI"))
         print("DEBUG ENV - LOGIN_OTP_REQUIRED:", os.getenv("LOGIN_OTP_REQUIRED"))
         user = await User.find_one({"email": email})
+        print("user.find ke baad wala print")
         if not user:
             return None
         if not AuthService.verify_password(password, user.password_hash):
