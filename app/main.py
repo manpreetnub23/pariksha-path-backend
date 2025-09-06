@@ -7,6 +7,8 @@ from datetime import datetime
 from pydantic import BaseModel
 from .db import init_db
 import uvicorn
+import traceback
+from fastapi.responses import JSONResponse
 from .models.user import User
 from .models.enums import UserRole, ExamCategory
 from .models.course import Course
@@ -58,6 +60,15 @@ async def db_init_middleware(request: Request, call_next):
     response = await call_next(request)
     return response
 
+
+@app.exception_handler(Exception)
+async def all_exception_handler(request: Request, exc: Exception):
+    print("🔥 ERROR in request:", request.url.path)
+    traceback.print_exc()   # full stacktrace in Vercel logs
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"}
+    )
 
 # Include routers
 app.include_router(auth_router)
