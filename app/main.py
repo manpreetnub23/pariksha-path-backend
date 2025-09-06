@@ -1,8 +1,7 @@
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException, Depends, status, Query
+from fastapi import FastAPI, HTTPException, Depends, status, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
-from contextlib import asynccontextmanager
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -26,38 +25,39 @@ from .routers.analytics import router as analytics_router
 # Security
 security = HTTPBearer()
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Initialize database on startup"""
-    await init_db()
-    print("Database initialized successfully!")
-    yield
-
-
-
 # Initialize FastAPI app
 app = FastAPI(
     title="Pariksha Path API",
     description="Backend API for Pariksha Path",
     version="1.0.0",
-    lifespan=lifespan,
 )
 
 # Configure CORS
 origins = [
     "http://localhost:3000",  # Your local frontend
     "https://pariksha-path2-0.vercel.app",  # Your production frontend
-    # Add any other frontend URLs you need
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Configure appropriately for production
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 👇 Middleware to run init_db() on first request
+@app.middleware("http")
+async def db_init_middleware(request: Request, call_next):
+    if not hasattr(app.state, "db_initialized"):
+        print("⚡ Running init_db() from middleware (first request only)...")
+        await init_db()
+        app.state.db_initialized = True
+        print("✅ Database initialized via middleware")
+
+    response = await call_next(request)
+    return response
+
 
 # Include routers
 app.include_router(auth_router)
@@ -74,10 +74,6 @@ app.include_router(analytics_router)
 async def root():
     return {"message": "Coaching Institute API is running!", "status": "healthy"}
 
-@app.get("/debug-init")
-async def debug_init():
-    await init_db()
-    return {"message": "init_db called manually"}
 
 @app.get("/health")
 async def health_check():
@@ -106,7 +102,6 @@ async def get_courses(
 ):
     """Get all available courses with filtering and pagination"""
     try:
-        # Build query filters
         query_filters = {"is_active": True}
 
         if category:
@@ -116,19 +111,14 @@ async def get_courses(
             query_filters["is_free"] = is_free
 
         if search:
-            # Search in title or description
             query_filters["$or"] = [
                 {"title": {"$regex": search, "$options": "i"}},
                 {"description": {"$regex": search, "$options": "i"}},
             ]
 
-        # Calculate pagination
         skip = (page - 1) * limit
-
-        # Set sort order
         sort_direction = 1 if sort_order == "asc" else -1
 
-        # Fetch courses
         courses = (
             await Course.find(query_filters)
             .sort([(sort_by, sort_direction)])
@@ -137,11 +127,9 @@ async def get_courses(
             .to_list()
         )
 
-        # Count total matching courses for pagination info
         total_courses = await Course.find(query_filters).count()
         total_pages = (total_courses + limit - 1) // limit
 
-        # Format response
         course_list = []
         for course in courses:
             course_list.append(
@@ -180,37 +168,28 @@ async def get_courses(
         )
 
 
-# Removed: Mock test routes are now handled by the tests router
-
-
 # Admin routes - Admin only
 @app.get("/api/v1/admin/dashboard")
 async def admin_dashboard(current_user: User = Depends(get_current_user)):
-    """Admin dashboard data with key metrics and statistics"""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
         )
 
     try:
-        # Get user statistics
         total_users = await User.find({"role": UserRole.STUDENT}).count()
         active_users = await User.find(
             {"role": UserRole.STUDENT, "is_active": True}
         ).count()
 
-        # Get course statistics
         total_courses = await Course.find().count()
         active_courses = await Course.find({"is_active": True}).count()
 
-        # Get test statistics
         total_tests = await TestSeries.find().count()
         total_attempts = await TestAttempt.find().count()
 
-        # Get material statistics
         total_materials = await StudyMaterial.find().count()
 
-        # Get recent users (last 5 registered)
         recent_users = (
             await User.find({"role": UserRole.STUDENT})
             .sort([("created_at", -1)])
@@ -229,7 +208,6 @@ async def admin_dashboard(current_user: User = Depends(get_current_user)):
             for user in recent_users
         ]
 
-        # Get recent test attempts
         recent_attempts = (
             await TestAttempt.find().sort([("created_at", -1)]).limit(5).to_list()
         )
@@ -256,13 +234,11 @@ async def admin_dashboard(current_user: User = Depends(get_current_user)):
                     }
                 )
 
-        # Get exam category distribution
         exam_categories = {}
         for category in ExamCategory:
             count = await User.find({"preferred_exam_categories": category}).count()
             exam_categories[category.value] = count
 
-        # Compile dashboard data
         dashboard_data = {
             "users": {
                 "total": total_users,
@@ -280,9 +256,7 @@ async def admin_dashboard(current_user: User = Depends(get_current_user)):
                 "attempts": total_attempts,
                 "recent_attempts": recent_attempts_data,
             },
-            "materials": {
-                "total": total_materials,
-            },
+            "materials": {"total": total_materials},
             "exam_categories": exam_categories,
         }
 
@@ -299,7 +273,7 @@ async def admin_dashboard(current_user: User = Depends(get_current_user)):
         )
 
 
-# Development Routes (keep for now, remove in production)
+# Dev-only routes
 class UserCreateRequest(BaseModel):
     name: str
     email: str
@@ -329,7 +303,6 @@ class UserUpdateRequest(BaseModel):
 
 @app.post("/api/v1/dev/create_user")
 async def create_user(user_data: UserCreateRequest):
-    """Create a new user (Development only)"""
     try:
         existing_user = await User.find_one({"email": user_data.email})
         if existing_user:
@@ -357,10 +330,9 @@ async def create_user(user_data: UserCreateRequest):
         )
 
 
-# 👇 Keep this at bottom of app/main.py
-# Only run uvicorn locally, not in Vercel
+# 👇 Only run uvicorn locally
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
 
-# # Vercel needs this (export app object)
+# 👇 Vercel expects `app` object
 # app = app
