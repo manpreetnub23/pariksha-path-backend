@@ -20,6 +20,7 @@ from .routers.exam_categories import router as exam_categories_router
 from .routers.tests import router as tests_router
 from .routers.materials import router as materials_router
 from .routers.analytics import router as analytics_router
+import asyncio
 
 
 # Security
@@ -48,12 +49,15 @@ app.add_middleware(
 
 # 👇 Middleware to run init_db() on first request
 @app.middleware("http")
-async def db_init_middleware(request: Request, call_next):
-    if not hasattr(app.state, "db_initialized"):
-        print("⚡ Running init_db() from middleware (first request only)...")
+async def db_session_middleware(request: Request, call_next):
+    current_loop = asyncio.get_event_loop()
+
+    # (Re)initialize if loop has changed
+    if not hasattr(app.state, "db_loop") or app.state.db_loop != current_loop:
+        print("⚡ Initializing database for current loop...")
         await init_db()
-        app.state.db_initialized = True
-        print("✅ Database initialized via middleware")
+        app.state.db_loop = current_loop
+        print("✅ Database initialized for loop")
 
     response = await call_next(request)
     return response
