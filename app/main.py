@@ -7,8 +7,6 @@ from datetime import datetime
 from pydantic import BaseModel
 from .db import init_db
 import uvicorn
-import logging
-logger = logging.getLogger(__name__)
 from .models.user import User
 from .models.enums import UserRole, ExamCategory
 from .models.course import Course
@@ -165,7 +163,6 @@ async def get_courses(
         }
 
     except Exception as e:
-        logger.exception("Unexpected error during login")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve courses: {str(e)}",
