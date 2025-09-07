@@ -47,18 +47,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 👇 Middleware to run init_db() on first request
+# Initialize database on startup
+@app.on_event("startup")
+async def startup_db_client():
+    print("⚡ Initializing database connection...")
+    await init_db()
+    print("✅ Database initialized successfully")
+
+# Keep the middleware for backward compatibility if needed
 @app.middleware("http")
 async def db_session_middleware(request: Request, call_next):
-    current_loop = asyncio.get_event_loop()
-
-    # (Re)initialize if loop has changed
-    if not hasattr(app.state, "db_loop") or app.state.db_loop != current_loop:
-        print("⚡ Initializing database for current loop...")
-        await init_db()
-        app.state.db_loop = current_loop
-        print("✅ Database initialized for loop")
-
+    # Database is now initialized at startup, just pass through
     response = await call_next(request)
     return response
 
