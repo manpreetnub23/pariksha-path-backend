@@ -7,6 +7,7 @@ from ..models.test import (
     create_test_session,
     get_test_with_attempt_stats,
 )
+from ..models.question import Question
 from ..models.course import Course
 from ..models.user import User
 from ..models.enums import ExamCategory
@@ -414,3 +415,26 @@ async def get_test_attempt(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve test attempt: {str(e)}",
         )
+
+
+@router.get("/{test_id}/questions")
+async def get_test_questions(
+    test_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    test = await get_or_404(TestSeries, test_id, detail="Test not found")
+
+    if not test.is_active:
+        raise HTTPException(status_code=404, detail="Test not active")
+
+    # Fetch questions by IDs
+    questions = []
+    for qid in test.question_ids:
+        question = await Question.get(qid)
+        if question:
+            questions.append(question)
+
+    return format_response(
+        message="Questions retrieved successfully",
+        data=[q.dict() for q in questions]
+    )
