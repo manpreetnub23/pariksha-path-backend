@@ -8,8 +8,10 @@ from .models.admin_action import AdminAction
 from .models.course import Course
 from .models.material import Material
 from .models.study_material import StudyMaterial, UserMaterialProgress
+
 # from .models.blog import Blog
 from .models.result import Result
+
 # from .models.payment import Payment
 # from .models.notification import Notification
 # from .models.contact import Contact
@@ -20,8 +22,13 @@ from urllib.parse import urlparse
 
 async def init_db():
     try:
-        # create motor client using MONGO_URI from settings
-        client = motor.motor_asyncio.AsyncIOMotorClient(settings.MONGO_URI)
+        # Log the start of initialization (without showing the actual URI for security)
+        print("🔄 Initializing MongoDB connection...")
+
+        # create motor client using MONGO_URI from settings with a timeout
+        client = motor.motor_asyncio.AsyncIOMotorClient(
+            settings.MONGO_URI, serverSelectionTimeoutMS=5000  # 5 second timeout
+        )
 
         # Test the connection
         await client.admin.command("ping")
@@ -63,7 +70,11 @@ async def init_db():
             ],
         )
         print("✅ Beanie ODM initialized successfully!")
+        return client  # Return client for potential cleanup later
 
     except Exception as e:
         print(f"❌ Database connection failed: {str(e)}")
+        # Print detailed connection error to help with debugging
+        if "MONGO_URI" in str(e).upper():
+            print("⚠️ Check that your MONGO_URI environment variable is correctly set")
         raise e

@@ -47,20 +47,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Initialize database on startup
 @app.on_event("startup")
 async def startup_db_client():
     print("⚡ Initializing database connection...")
-    await init_db()
+    app.mongodb_client = await init_db()  # Store client for potential cleanup
     print("✅ Database initialized successfully")
 
-# Keep the middleware for backward compatibility if needed
-@app.middleware("http")
-async def db_session_middleware(request: Request, call_next):
-    # Database is now initialized at startup, just pass through
-    response = await call_next(request)
-    return response
 
+# Cleanup database connection on shutdown
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    if hasattr(app, "mongodb_client"):
+        print("🔄 Closing MongoDB connection...")
+        app.mongodb_client.close()
+        print("✅ MongoDB connection closed")
 
 
 # Include routers
