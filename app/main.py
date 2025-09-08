@@ -56,6 +56,26 @@ async def startup_db_client():
     print("✅ Database initialized successfully")
 
 
+# Ensure database is initialized at the start of each request (for serverless environment)
+@app.middleware("http")
+async def db_session_middleware(request: Request, call_next):
+    # Initialize DB if needed - in serverless environments, this ensures we have a connection
+    # This uses our cached client approach so it's fast after the first call
+    if (
+        "auth" in request.url.path
+        or "admin" in request.url.path
+        or "dashboard" in request.url.path
+    ):
+        # Only initialize on paths that will need DB access
+        from .db import get_db_client
+
+        await get_db_client()
+
+    # Continue with the request
+    response = await call_next(request)
+    return response
+
+
 # Cleanup database connection on shutdown
 @app.on_event("shutdown")
 async def shutdown_db_client():

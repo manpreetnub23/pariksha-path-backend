@@ -20,6 +20,7 @@ from ..auth import ACCESS_TOKEN_EXPIRE_MINUTES
 from ..dependencies import get_current_user, security
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
@@ -169,10 +170,23 @@ async def login(login_data: UserLoginRequest):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.exception("Unexpected error during login")
+        logger.exception(f"Login error: {str(e)}")
+        # Log more details about the exception to help diagnose connection issues
+        print(f"Login error details - Type: {type(e).__name__}, Message: {str(e)}")
+
+        # More specific error message based on the exception type
+        if "ConnectionFailure" in str(
+            type(e).__name__
+        ) or "ServerSelectionTimeoutError" in str(type(e).__name__):
+            detail = (
+                "Database connection error. Please try again later or contact support."
+            )
+        else:
+            detail = f"Login failed: {str(e)}"
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login failed: {str(e)}",
+            detail=detail,
         )
 
 

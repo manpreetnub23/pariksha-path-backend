@@ -180,13 +180,25 @@ class AuthService:
     @staticmethod
     async def authenticate_user(email: str, password: str) -> Optional[User]:
         """Authenticate user with email and password"""
-        user = await User.find_one({"email": email})
-        print("user.find ke baad wala print")
-        if not user:
-            return None
-        if not AuthService.verify_password(password, user.password_hash):
-            return None
-        return user
+        try:
+            print(f"Attempting to authenticate user: {email}")
+            user = await User.find_one({"email": email})
+            print(f"Database query completed, user found: {user is not None}")
+
+            if not user:
+                return None
+
+            password_valid = AuthService.verify_password(password, user.password_hash)
+            print(f"Password verification result: {password_valid}")
+
+            if not password_valid:
+                return None
+
+            return user
+        except Exception as e:
+            print(f"Authentication error: {str(e)}")
+            # Re-raise to be handled by the caller
+            raise
 
     @staticmethod
     async def verify_token(token: str) -> TokenData:

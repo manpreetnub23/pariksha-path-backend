@@ -20,19 +20,46 @@ from .config import settings
 from urllib.parse import urlparse
 
 
-async def init_db():
-    try:
-        # Log the start of initialization (without showing the actual URI for security)
-        print("🔄 Initializing MongoDB connection...")
+# Keep a global client reference
+_global_client = None
 
-        # create motor client using MONGO_URI from settings with a timeout
-        client = motor.motor_asyncio.AsyncIOMotorClient(
-            settings.MONGO_URI, serverSelectionTimeoutMS=5000  # 5 second timeout
+
+async def get_db_client():
+    """Get or create a MongoDB client"""
+    global _global_client
+
+    if _global_client is None:
+        # Create new client with connection pooling optimized for serverless
+        print("🔄 Creating new MongoDB client...")
+        _global_client = motor.motor_asyncio.AsyncIOMotorClient(
+            settings.MONGO_URI,
+            serverSelectionTimeoutMS=5000,  # 5 second timeout
+            maxPoolSize=10,  # Limit connection pool for serverless
+            minPoolSize=0,  # Don't keep idle connections open
+            maxIdleTimeMS=30000,  # Close idle connections after 30 seconds
+            connectTimeoutMS=5000,  # Connection timeout
+            retryWrites=True,  # Retry failed write operations
+            socketTimeoutMS=20000,  # Socket timeout
         )
 
-        # Test the connection
-        await client.admin.command("ping")
-        print("✅ Database connection successful! MongoDB is connected.")
+    return _global_client
+
+
+async def init_db():
+    """Initialize database and register models"""
+    try:
+        # Log the start of initialization
+        print("🔄 Initializing MongoDB connection...")
+
+        # Get client (creates new one if needed)
+        client = await get_db_client()
+
+        # Test the connection with short timeout
+        try:
+            await client.admin.command("ping", socketTimeoutMS=5000)
+            print("✅ Database connection successful! MongoDB is connected.")
+        except Exception as e:
+            print(f"⚠️ Ping failed, but continuing: {str(e)}")
 
         # Extract database name from MONGO_URI
         parsed_uri = urlparse(settings.MONGO_URI)
@@ -41,7 +68,7 @@ async def init_db():
         # If no database name in URI, use default
         if not db_name:
             db_name = "pariksha_path_db"
-            print(f"⚠️  No database name found in MONGO_URI, using default: {db_name}")
+            print(f"⚠️ No database name found in MONGO_URI, using default: {db_name}")
 
         print(f"📁 Using database: {db_name}")
         db = client.get_database(db_name)
@@ -68,6 +95,7 @@ async def init_db():
                 # Contact,
                 ExamCategoryStructure,
             ],
+            allow_index_dropping=False,  # Safer for production
         )
         print("✅ Beanie ODM initialized successfully!")
         return client  # Return client for potential cleanup later
