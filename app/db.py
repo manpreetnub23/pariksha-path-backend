@@ -31,16 +31,28 @@ async def get_db_client():
     if _global_client is None:
         # Create new client with connection pooling optimized for serverless
         print("🔄 Creating new MongoDB client...")
+
+        # Enhanced connection settings for serverless environments
         _global_client = motor.motor_asyncio.AsyncIOMotorClient(
             settings.MONGO_URI,
             serverSelectionTimeoutMS=5000,  # 5 second timeout
-            maxPoolSize=10,  # Limit connection pool for serverless
-            minPoolSize=0,  # Don't keep idle connections open
-            maxIdleTimeMS=30000,  # Close idle connections after 30 seconds
+            maxPoolSize=5,  # Reduced pool size for serverless
+            minPoolSize=0,  # No minimum connections
+            maxIdleTimeMS=15000,  # Close idle connections faster (15s)
             connectTimeoutMS=5000,  # Connection timeout
             retryWrites=True,  # Retry failed write operations
             socketTimeoutMS=20000,  # Socket timeout
+            socketKeepAlive=True,  # Keep socket alive
+            appname="pariksha-path-vercel",  # App name for monitoring
+            waitQueueTimeoutMS=5000,  # Wait queue timeout
+            ssl=True,  # Use SSL
+            tlsAllowInvalidCertificates=False,  # Validate certificates
         )
+
+        # Log connection details
+        print("📊 MongoDB client configured with optimized serverless settings")
+    else:
+        print("♻️ Reusing existing MongoDB client")
 
     return _global_client
 

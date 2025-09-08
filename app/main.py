@@ -2,7 +2,7 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Depends, status, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pydantic import BaseModel
 from .db import init_db
@@ -56,20 +56,38 @@ async def startup_db_client():
     print("✅ Database initialized successfully")
 
 
-# Ensure database is initialized at the start of each request (for serverless environment)
+# Enhanced middleware for serverless environments to ensure database connectivity
 @app.middleware("http")
 async def db_session_middleware(request: Request, call_next):
-    # Initialize DB if needed - in serverless environments, this ensures we have a connection
-    # This uses our cached client approach so it's fast after the first call
-    if (
-        "auth" in request.url.path
-        or "admin" in request.url.path
-        or "dashboard" in request.url.path
-    ):
-        # Only initialize on paths that will need DB access
-        from .db import get_db_client
+    # Skip DB initialization for static assets and health checks
+    if request.url.path.startswith(("/static/", "/favicon.ico", "/health")):
+        return await call_next(request)
 
-        await get_db_client()
+    # For API routes that need database access, ensure connection is ready
+    if request.url.path.startswith(("/api/")):
+        try:
+            # Import here to avoid circular imports
+            from .db import get_db_client
+
+            # Get client and log attempt
+            start_time = datetime.now()
+            client = await get_db_client()
+
+            # Quick ping test with timeout to verify connection is working
+            # This uses the cached connection so should be fast
+            try:
+                await client.admin.command("ping", socketTimeoutMS=2000)
+            except Exception as e:
+                print(f"⚠️ DB ping check failed but continuing: {str(e)}")
+
+            # Log connection time for monitoring
+            elapsed = (datetime.now() - start_time).total_seconds() * 1000
+            print(f"✓ DB connection ready in {elapsed:.2f}ms")
+
+        except Exception as e:
+            # Log error but don't fail the request yet
+            # Let the actual endpoint handle DB errors appropriately
+            print(f"❌ DB connection middleware error: {str(e)}")
 
     # Continue with the request
     response = await call_next(request)
@@ -104,6 +122,50 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "coaching-api"}
+
+
+@app.get("/api/v1/db-health")
+async def db_health_check():
+    """Check MongoDB connection health - useful for diagnosing connection issues"""
+    try:
+        # Import here to avoid circular imports
+        from .db import get_db_client
+
+        # Get client and measure connection time
+        start_time = datetime.now()
+        client = await get_db_client()
+        client_time = (datetime.now() - start_time).total_seconds() * 1000
+
+        # Test with a ping command
+        ping_start = datetime.now()
+        await client.admin.command("ping")
+        ping_time = (datetime.now() - ping_start).total_seconds() * 1000
+
+        # Get server info
+        server_info = await client.admin.command("serverStatus")
+        connection_info = server_info.get("connections", {})
+
+        return {
+            "status": "connected",
+            "timing": {
+                "client_init_ms": round(client_time, 2),
+                "ping_ms": round(ping_time, 2),
+                "total_ms": round(client_time + ping_time, 2),
+            },
+            "connections": {
+                "current": connection_info.get("current"),
+                "available": connection_info.get("available"),
+                "total_created": connection_info.get("totalCreated"),
+            },
+            "server_time": datetime.now().isoformat(),
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "server_time": datetime.now().isoformat(),
+        }
 
 
 # API Routes Groups
