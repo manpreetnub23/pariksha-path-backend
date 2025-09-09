@@ -1,4 +1,5 @@
-from typing import List, Optional
+from typing import List, Optional, AsyncIterator
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, status, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
@@ -21,16 +22,36 @@ from .routers.tests import router as tests_router
 from .routers.materials import router as materials_router
 from .routers.analytics import router as analytics_router
 import asyncio
+from .dependencies import ensure_db
 
 
 # Security
 security = HTTPBearer()
 
-# Initialize FastAPI app
+
+# Lifespan context manager for startup and shutdown events
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Startup
+    print("⚡ Initializing database connection...")
+    app.mongodb_client = await init_db()  # Store client for cleanup
+    print("✅ Database initialized successfully")
+
+    yield  # App runs here
+
+    # Shutdown
+    if hasattr(app, "mongodb_client") and app.mongodb_client:
+        print("\n🛑 Closing database connection...")
+        await app.mongodb_client.close()
+        print("✅ Database connection closed")
+
+
+# Initialize FastAPI app with lifespan
 app = FastAPI(
     title="Pariksha Path API",
     description="Backend API for Pariksha Path",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Configure CORS
@@ -46,14 +67,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# Initialize database on startup
-@app.on_event("startup")
-async def startup_db_client():
-    print("⚡ Initializing database connection...")
-    app.mongodb_client = await init_db()  # Store client for potential cleanup
-    print("✅ Database initialized successfully")
 
 
 # Enhanced middleware for serverless environments to ensure database connectivity
@@ -92,15 +105,6 @@ async def db_session_middleware(request: Request, call_next):
     # Continue with the request
     response = await call_next(request)
     return response
-
-
-# Cleanup database connection on shutdown
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    if hasattr(app, "mongodb_client"):
-        print("🔄 Closing MongoDB connection...")
-        app.mongodb_client.close()
-        print("✅ MongoDB connection closed")
 
 
 # Include routers
