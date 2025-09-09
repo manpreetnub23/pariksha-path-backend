@@ -1,5 +1,14 @@
+# app/db.py
+import asyncio
+from urllib.parse import urlparse
+from typing import Optional
+
 import motor.motor_asyncio
+from pymongo.server_api import ServerApi
 from beanie import init_beanie
+from pymongo.errors import PyMongoError
+
+from .config import settings
 from .models.user import User
 from .models.question import Question
 from .models.test import TestSeries, TestSession, TestAttempt
@@ -8,84 +17,104 @@ from .models.admin_action import AdminAction
 from .models.course import Course
 from .models.material import Material
 from .models.study_material import StudyMaterial, UserMaterialProgress
-
-# from .models.blog import Blog
-from .models.result import Result
-
-# from .models.payment import Payment
-# from .models.notification import Notification
-# from .models.contact import Contact
 from .models.exam_category_structure import ExamCategoryStructure
-from .config import settings
-from urllib.parse import urlparse
+
+# from .models.result import Result  # enable if needed
+
+# Globals (one client + one beanie-init flag per process)
+_global_client: Optional[motor.motor_asyncio.AsyncIOMotorClient] = None
+_client_lock = asyncio.Lock()
+
+_beanie_initialized = False
+_beanie_lock = asyncio.Lock()
 
 
-# Keep a global client reference
-_global_client = None
+async def _make_client() -> motor.motor_asyncio.AsyncIOMotorClient:
+    """
+    Create a Motor client tuned for serverless. Adjust pool sizes/timeouts for your load.
+    """
+    return motor.motor_asyncio.AsyncIOMotorClient(
+        settings.MONGO_URI,
+        serverSelectionTimeoutMS=5000,
+        connectTimeoutMS=5000,
+        socketTimeoutMS=20000,
+        maxPoolSize=2,  # small pool for serverless
+        minPoolSize=0,
+        maxIdleTimeMS=10000,  # close idle faster
+        waitQueueTimeoutMS=5000,
+        appname="pariksha-path-vercel",
+        tls=True,
+        tlsAllowInvalidCertificates=False,
+        server_api=ServerApi("1"),
+    )
 
 
-async def get_db_client():
-    """Get or create a MongoDB client"""
+async def get_db_client() -> motor.motor_asyncio.AsyncIOMotorClient:
+    """
+    Return a long-lived client for this process. Recreate if ping fails.
+    Safe for concurrent cold-starts via an async lock.
+    """
     global _global_client
 
-    if _global_client is None:
-        # Create new client with connection pooling optimized for serverless
-        print("🔄 Creating new MongoDB client...")
+    # fast path: existing client and healthy
+    if _global_client is not None:
+        try:
+            await _global_client.admin.command("ping")
+            return _global_client
+        except Exception:
+            try:
+                _global_client.close()
+            except Exception:
+                pass
+            _global_client = None
 
-        # Enhanced connection settings for serverless environments
-        _global_client = motor.motor_asyncio.AsyncIOMotorClient(
-            settings.MONGO_URI,
-            serverSelectionTimeoutMS=5000,  # 5 second timeout
-            maxPoolSize=5,  # Reduced pool size for serverless
-            minPoolSize=0,  # No minimum connections
-            maxIdleTimeMS=15000,  # Close idle connections faster (15s)
-            connectTimeoutMS=5000,  # Connection timeout
-            retryWrites=True,  # Retry failed write operations
-            socketTimeoutMS=20000,  # Socket timeout
-            socketKeepAlive=True,  # Keep socket alive
-            appname="pariksha-path-vercel",  # App name for monitoring
-            waitQueueTimeoutMS=5000,  # Wait queue timeout
-            ssl=True,  # Use SSL
-            tlsAllowInvalidCertificates=False,  # Validate certificates
-        )
+    # guarded creation to avoid concurrent double-init
+    async with _client_lock:
+        if _global_client is not None:
+            # another coroutine already created it
+            try:
+                await _global_client.admin.command("ping")
+                return _global_client
+            except Exception:
+                try:
+                    _global_client.close()
+                except Exception:
+                    pass
+                _global_client = None
 
-        # Log connection details
-        print("📊 MongoDB client configured with optimized serverless settings")
-    else:
-        print("♻️ Reusing existing MongoDB client")
+        # create client
+        _global_client = await _make_client()
+        try:
+            await _global_client.admin.command("ping")
+        except Exception:
+            # ping failed; leave client assigned so callers can decide;
+            # get_db_client callers should handle errors if ping is required.
+            pass
 
     return _global_client
 
 
-async def init_db():
-    """Initialize database and register models"""
-    try:
-        # Log the start of initialization
-        print("🔄 Initializing MongoDB connection...")
+async def init_db() -> None:
+    """
+    Initialize Beanie once per process. Safe to call repeatedly (idempotent).
+    """
+    global _beanie_initialized
 
-        # Get client (creates new one if needed)
+    if _beanie_initialized:
+        return
+
+    async with _beanie_lock:
+        if _beanie_initialized:
+            return
+
         client = await get_db_client()
 
-        # Test the connection with short timeout
-        try:
-            await client.admin.command("ping", socketTimeoutMS=5000)
-            print("✅ Database connection successful! MongoDB is connected.")
-        except Exception as e:
-            print(f"⚠️ Ping failed, but continuing: {str(e)}")
-
-        # Extract database name from MONGO_URI
-        parsed_uri = urlparse(settings.MONGO_URI)
-        db_name = parsed_uri.path.lstrip("/")  # Remove leading slash
-
-        # If no database name in URI, use default
-        if not db_name:
-            db_name = "pariksha_path_db"
-            print(f"⚠️ No database name found in MONGO_URI, using default: {db_name}")
-
-        print(f"📁 Using database: {db_name}")
+        # derive DB name from URI or fallback
+        parsed = urlparse(settings.MONGO_URI)
+        db_name = parsed.path.lstrip("/") or "pariksha_path_db"
         db = client.get_database(db_name)
 
-        # Register all document models
+        # register models with Beanie
         await init_beanie(
             database=db,
             document_models=[
@@ -100,21 +129,177 @@ async def init_db():
                 Material,
                 StudyMaterial,
                 UserMaterialProgress,
-                # Blog,
-                # Result,
-                # Payment,
-                # Notification,
-                # Contact,
                 ExamCategoryStructure,
+                # Result,
             ],
-            allow_index_dropping=False,  # Safer for production
+            allow_index_dropping=False,
         )
-        print("✅ Beanie ODM initialized successfully!")
-        return client  # Return client for potential cleanup later
 
-    except Exception as e:
-        print(f"❌ Database connection failed: {str(e)}")
-        # Print detailed connection error to help with debugging
-        if "MONGO_URI" in str(e).upper():
-            print("⚠️ Check that your MONGO_URI environment variable is correctly set")
-        raise e
+        _beanie_initialized = True
+
+
+def close_client() -> None:
+    """
+    Close and drop the process-global client (useful during cleanup/tests).
+    """
+    global _global_client, _beanie_initialized
+    try:
+        if _global_client is not None:
+            _global_client.close()
+    except Exception:
+        pass
+    _global_client = None
+    _beanie_initialized = False
+
+
+# # app/db.py
+# import asyncio
+# from urllib.parse import urlparse
+# from typing import Optional
+
+# import motor.motor_asyncio
+# from pymongo.server_api import ServerApi
+# from beanie import init_beanie
+# from pymongo.errors import PyMongoError
+
+# from .config import settings
+# from .models.user import User
+# from .models.question import Question
+# from .models.test import TestSeries, TestSession, TestAttempt
+# from .models.user_analytics import UserAnalytics
+# from .models.admin_action import AdminAction
+# from .models.course import Course
+# from .models.material import Material
+# from .models.study_material import StudyMaterial, UserMaterialProgress
+# from .models.exam_category_structure import ExamCategoryStructure
+# # from .models.result import Result  # enable if needed
+
+# # Globals (one client + one beanie-init flag per process)
+# _global_client: Optional[motor.motor_asyncio.AsyncIOMotorClient] = None
+# _client_lock = asyncio.Lock()
+
+# _beanie_initialized = False
+# _beanie_lock = asyncio.Lock()
+
+
+# async def _make_client() -> motor.motor_asyncio.AsyncIOMotorClient:
+#     """
+#     Create a Motor client tuned for serverless. Adjust pool sizes/timeouts for your load.
+#     """
+#     return motor.motor_asyncio.AsyncIOMotorClient(
+#         settings.MONGO_URI,
+#         serverSelectionTimeoutMS=5000,
+#         connectTimeoutMS=5000,
+#         socketTimeoutMS=20000,
+#         maxPoolSize=2,        # small pool for serverless
+#         minPoolSize=0,
+#         maxIdleTimeMS=10000,  # close idle faster
+#         waitQueueTimeoutMS=5000,
+#         appname="pariksha-path-vercel",
+#         tls=True,
+#         tlsAllowInvalidCertificates=False,
+#         server_api=ServerApi("1"),
+#     )
+
+
+# async def get_db_client() -> motor.motor_asyncio.AsyncIOMotorClient:
+#     """
+#     Return a long-lived client for this process. Recreate if ping fails.
+#     Safe for concurrent cold-starts via an async lock.
+#     """
+#     global _global_client
+
+#     # fast path: existing client and healthy
+#     if _global_client is not None:
+#         try:
+#             await _global_client.admin.command("ping")
+#             return _global_client
+#         except Exception:
+#             try:
+#                 _global_client.close()
+#             except Exception:
+#                 pass
+#             _global_client = None
+
+#     # guarded creation to avoid concurrent double-init
+#     async with _client_lock:
+#         if _global_client is not None:
+#             # another coroutine already created it
+#             try:
+#                 await _global_client.admin.command("ping")
+#                 return _global_client
+#             except Exception:
+#                 try:
+#                     _global_client.close()
+#                 except Exception:
+#                     pass
+#                 _global_client = None
+
+#         # create client
+#         _global_client = await _make_client()
+#         try:
+#             await _global_client.admin.command("ping")
+#         except Exception:
+#             # ping failed; leave client assigned so callers can decide;
+#             # get_db_client callers should handle errors if ping is required.
+#             pass
+
+#     return _global_client
+
+
+# async def init_db() -> None:
+#     """
+#     Initialize Beanie once per process. Safe to call repeatedly (idempotent).
+#     """
+#     global _beanie_initialized
+
+#     if _beanie_initialized:
+#         return
+
+#     async with _beanie_lock:
+#         if _beanie_initialized:
+#             return
+
+#         client = await get_db_client()
+
+#         # derive DB name from URI or fallback
+#         parsed = urlparse(settings.MONGO_URI)
+#         db_name = parsed.path.lstrip("/") or "pariksha_path_db"
+#         db = client.get_database(db_name)
+
+#         # register models with Beanie
+#         await init_beanie(
+#             database=db,
+#             document_models=[
+#                 User,
+#                 Question,
+#                 TestAttempt,
+#                 TestSeries,
+#                 TestSession,
+#                 UserAnalytics,
+#                 AdminAction,
+#                 Course,
+#                 Material,
+#                 StudyMaterial,
+#                 UserMaterialProgress,
+#                 ExamCategoryStructure,
+#                 # Result,
+#             ],
+#             allow_index_dropping=False,
+#         )
+
+#         _beanie_initialized = True
+
+
+# def close_client() -> None:
+#     """
+#     Close and drop the process-global client (useful during cleanup/tests).
+#     """
+#     global _global_client, _beanie_initialized
+#     try:
+#         if _global_client is not None:
+#             _global_client.close()
+#     except Exception:
+#         pass
+#     _global_client = None
+#     _beanie_initialized = False

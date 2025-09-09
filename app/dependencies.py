@@ -3,10 +3,19 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from .models.user import User
 from .models.enums import UserRole
 from .auth import AuthService
+from .db import init_db
 
 # Security setup
 security = HTTPBearer()
 
+
+
+async def ensure_db():
+    """
+    FastAPI dependency: call on routes/routers requiring DB.
+    First call triggers init_beanie once; subsequent calls are cheap.
+    """
+    await init_db()
 
 # Dependency to get current user
 async def get_current_user(
