@@ -10,7 +10,7 @@ import os
 import sys
 
 # Add the project root to Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 # Import models
@@ -30,7 +30,7 @@ from app.models.enums import (
     UserRole,
     MaterialType,
     MaterialAccessType,
-    MaterialCategory
+    MaterialCategory,
 )
 
 from app.db import init_db
@@ -66,16 +66,8 @@ async def create_admin_user() -> User:
         is_verified=True,
         has_premium_access=True,
         preferred_exam_categories=[],
-        settings={
-            "theme": "dark",
-            "notifications": True,
-            "email_updates": True
-        },
-        ui_preferences={
-            "theme": "dark",
-            "font_size": "medium",
-            "density": "normal"
-        },
+        settings={"theme": "dark", "notifications": True, "email_updates": True},
+        ui_preferences={"theme": "dark", "font_size": "medium", "density": "normal"},
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -89,7 +81,7 @@ async def create_users(count: int = 10) -> List[User]:
         is_active = random.choice([True, True, True, False])  # 75% active
         is_verified = random.choice([True, False])
         has_premium = random.choice([True, False, False, False])  # 25% premium
-        
+
         user = User(
             name=fake.name(),
             email=fake.email(),
@@ -99,17 +91,19 @@ async def create_users(count: int = 10) -> List[User]:
             is_active=is_active,
             is_verified=is_verified,
             is_email_verified=is_verified,
-            preferred_exam_categories=random.sample(exam_categories, k=random.randint(1, 3)),
+            preferred_exam_categories=random.sample(
+                exam_categories, k=random.randint(1, 3)
+            ),
             has_premium_access=has_premium,
             dashboard_settings={
                 "theme": random.choice(["light", "dark"]),
                 "notifications": True,
-                "email_updates": random.choice([True, False])
+                "email_updates": random.choice([True, False]),
             },
             ui_preferences={
                 "theme": random.choice(["light", "dark"]),
                 "font_size": random.choice(["small", "medium", "large"]),
-                "density": random.choice(["compact", "normal", "comfortable"])
+                "density": random.choice(["compact", "normal", "comfortable"]),
             },
             created_at=get_random_timestamp(365),
             updated_at=get_random_timestamp(30),
@@ -124,7 +118,7 @@ async def create_courses(count: int = 5, creator: User = None) -> List[Course]:
     for _ in range(count):
         is_free = random.choice([True, True, False])  # 2/3 chance of being free
         price = 0 if is_free else random.choice([999, 1999, 2999, 4999])
-        
+
         course = Course(
             title=f"{fake.word().title()} {fake.word().title()} Course",
             description=fake.paragraph(),
@@ -133,8 +127,9 @@ async def create_courses(count: int = 5, creator: User = None) -> List[Course]:
             sub_category=random.choice(["Crash Course", "Full Course", "Revision"]),
             price=price,
             is_free=is_free,
-            duration_weeks=random.randint(4, 24),  # Random duration between 4 to 24 weeks
-            created_by=str(creator.id) if creator else "system",  # Default to "system" if no creator provided
+            created_by=(
+                str(creator.id) if creator else "system"
+            ),  # Default to "system" if no creator provided
             discount_percent=random.choice([0, 0, 0, 10, 20, 30]),  # Mostly no discount
             thumbnail_url=f"https://picsum.photos/400/200?random={random.randint(1,1000)}",
             icon_url=f"https://picsum.photos/100/100?random={random.randint(1,1000)}",
@@ -142,7 +137,7 @@ async def create_courses(count: int = 5, creator: User = None) -> List[Course]:
             tagline=fake.sentence(),
             instructor_id=str(creator.id) if creator else None,
             created_at=get_random_timestamp(180),
-            updated_at=get_random_timestamp(30)
+            updated_at=get_random_timestamp(30),
         )
         await course.create()
         courses.append(course)
@@ -157,7 +152,7 @@ async def create_test_series(
         difficulty = random.choice(difficulty_levels)
         duration = random.choice([30, 45, 60, 90, 120])
         total_questions = random.randint(30, 100)
-        
+
         series = TestSeries(
             title=f"{fake.word().title()} Test Series",
             description=fake.paragraph(),
@@ -173,23 +168,23 @@ async def create_test_series(
             instructions=f"This test contains {total_questions} questions to be completed in {duration} minutes.",
             created_by=str(creator.id) if creator else "system",
             created_at=get_random_timestamp(90),
-            updated_at=get_random_timestamp(15)
+            updated_at=get_random_timestamp(15),
         )
         await series.create()
         test_series.append(series)
     return test_series
 
 
-async def create_questions(test_series: TestSeries, count: int = 10, creator: User = None) -> List[Question]:
+async def create_questions(
+    test_series: TestSeries, count: int = 10, creator: User = None
+) -> List[Question]:
     questions = []
     for i in range(count):
-        options = [
-            {"text": fake.sentence(), "is_correct": False} for _ in range(3)
-        ]
+        options = [{"text": fake.sentence(), "is_correct": False} for _ in range(3)]
         # Add one correct answer
         correct_option = {"text": fake.sentence(), "is_correct": True}
         options.insert(random.randint(0, 3), correct_option)
-        
+
         question = Question(
             title=f"Question {i+1} - {fake.word().title()}",
             question_text=f"{fake.sentence()}?",
@@ -199,11 +194,13 @@ async def create_questions(test_series: TestSeries, count: int = 10, creator: Us
             options=options,
             explanation=fake.paragraph() if random.choice([True, False]) else "",
             subject=test_series.subject or random.choice(subjects),
-            topic=random.choice(["Mechanics", "Algebra", "Organic Chemistry", "Electromagnetism"]),
+            topic=random.choice(
+                ["Mechanics", "Algebra", "Organic Chemistry", "Electromagnetism"]
+            ),
             created_by=str(creator.id) if creator else "system",
             test_series_id=str(test_series.id),
             created_at=get_random_timestamp(60),
-            updated_at=get_random_timestamp(15)
+            updated_at=get_random_timestamp(15),
         )
         await question.create()
         questions.append(question)
@@ -217,9 +214,13 @@ async def create_test_attempts(
     for _ in range(count):
         is_completed = random.choice([True, True, False])  # 2/3 chance of completion
         start_time = get_random_timestamp(30)
-        end_time = start_time + timedelta(minutes=test_series.duration_minutes) if is_completed else None
+        end_time = (
+            start_time + timedelta(minutes=test_series.duration_minutes)
+            if is_completed
+            else None
+        )
         total_questions = test_series.total_questions
-        
+
         attempt = TestAttempt(
             user_id=str(user.id),
             test_series_id=str(test_series.id),
@@ -229,7 +230,11 @@ async def create_test_attempts(
             score=random.randint(30, 95) if is_completed else 0,
             max_score=test_series.max_score,
             total_questions=total_questions,
-            time_spent_seconds=test_series.duration_minutes * 60 if is_completed else random.randint(0, test_series.duration_minutes * 60),
+            time_spent_seconds=(
+                test_series.duration_minutes * 60
+                if is_completed
+                else random.randint(0, test_series.duration_minutes * 60)
+            ),
             created_at=start_time,
             updated_at=end_time or start_time,
         )
@@ -248,7 +253,7 @@ async def create_study_materials(
         access_type = random.choice(access_types)
         exam_category = course.category if course else random.choice(exam_categories)
         subject = random.choice(subjects)
-        
+
         material = StudyMaterial(
             title=f"{fake.word().title()} {mat_category.replace('_', ' ').title()}",
             description=fake.paragraph(),
@@ -262,7 +267,9 @@ async def create_study_materials(
             exam_category=exam_category,
             exam_subcategory=random.choice(["NEET", "JEE", "UPSC", "SSC"]),
             subject=subject,
-            topic=random.choice(["Mechanics", "Algebra", "Organic Chemistry", "Electromagnetism"]),
+            topic=random.choice(
+                ["Mechanics", "Algebra", "Organic Chemistry", "Electromagnetism"]
+            ),
             tags=[fake.word() for _ in range(random.randint(1, 5))],
             course_ids=[str(course.id)] if course else [],
             created_by=str(creator.id) if creator else "system",
@@ -279,7 +286,7 @@ async def create_user_analytics(users: List[User]) -> List[UserAnalytics]:
     for user in users:
         total_tests = random.randint(0, 50)
         avg_score = random.uniform(30, 95)
-        
+
         # Generate subject-wise analytics
         subject_analytics = {}
         for subject in random.sample(subjects, k=random.randint(1, len(subjects))):
@@ -288,22 +295,24 @@ async def create_user_analytics(users: List[User]) -> List[UserAnalytics]:
                 "average_score": random.uniform(30, 100),
                 "strength": random.choice(["strong", "average", "weak"]),
                 "last_attempted": get_random_timestamp(30).isoformat(),
-                "improvement": random.uniform(-10, 10)  # Percentage improvement
+                "improvement": random.uniform(-10, 10),  # Percentage improvement
             }
-        
+
         # Generate test history
         test_history = []
         for _ in range(random.randint(0, 10)):  # Last 10 tests
-            test_history.append({
-                "test_id": get_random_id(),
-                "test_name": f"{random.choice(['Weekly', 'Monthly', 'Mock'])} Test {random.randint(1, 100)}",
-                "score": random.randint(30, 100),
-                "max_score": 100,
-                "date": get_random_timestamp(30).isoformat(),
-                "subject": random.choice(subjects),
-                "time_spent": random.randint(300, 7200)  # 5 mins to 2 hours
-            })
-        
+            test_history.append(
+                {
+                    "test_id": get_random_id(),
+                    "test_name": f"{random.choice(['Weekly', 'Monthly', 'Mock'])} Test {random.randint(1, 100)}",
+                    "score": random.randint(30, 100),
+                    "max_score": 100,
+                    "date": get_random_timestamp(30).isoformat(),
+                    "subject": random.choice(subjects),
+                    "time_spent": random.randint(300, 7200),  # 5 mins to 2 hours
+                }
+            )
+
         analytic = UserAnalytics(
             user_id=str(user.id),
             user_email=user.email,
@@ -326,14 +335,20 @@ async def create_user_analytics(users: List[User]) -> List[UserAnalytics]:
 async def create_admin_actions(admin: User, count: int = 5) -> List[AdminAction]:
     actions = []
     action_types = ["create", "update", "delete"]  # Must match ActionType enum
-    target_collections = ["users", "courses", "test_series", "questions", "study_materials"]
-    
+    target_collections = [
+        "users",
+        "courses",
+        "test_series",
+        "questions",
+        "study_materials",
+    ]
+
     for _ in range(count):
         target_collection = random.choice(target_collections)
         field = random.choice(["status", "price", "content", "title", "description"])
         old_value = f"old_{field}"
         new_value = f"new_{field}"
-        
+
         action = AdminAction(
             admin_id=str(admin.id),
             action_type=action_types[random.randint(0, 2)],  # Random action type
@@ -341,9 +356,9 @@ async def create_admin_actions(admin: User, count: int = 5) -> List[AdminAction]
             target_id=get_random_id(),
             changes={
                 field: {"from": old_value, "to": new_value},
-                "updated_at": get_random_timestamp(30).isoformat()
+                "updated_at": get_random_timestamp(30).isoformat(),
             },
-            timestamp=get_random_timestamp(30)
+            timestamp=get_random_timestamp(30),
         )
         await action.create()
         actions.append(action)
@@ -376,6 +391,7 @@ async def main():
 
     # Initialize database connection using project's db module
     from app.db import init_db
+
     await init_db()
 
     # Clear existing data (be careful in production!)
@@ -402,7 +418,7 @@ async def main():
     # Create admin user
     print("👨‍💼 Creating admin user...")
     admin = await create_admin_user()
-    
+
     # Create exam category structure with admin ID
     print("📝 Creating exam category structure...")
     await create_exam_category_structure(str(admin.id))
@@ -425,11 +441,15 @@ async def main():
     print(f"📝 Creating test series and questions...")
     test_series_list = []
     for course in courses:
-        series = await create_test_series(3, course, random.choice(users))  # 3 test series per course
+        series = await create_test_series(
+            3, course, random.choice(users)
+        )  # 3 test series per course
         test_series_list.extend(series)
 
         for test in series:
-            await create_questions(test, 15, random.choice(users))  # 15 questions per test
+            await create_questions(
+                test, 15, random.choice(users)
+            )  # 15 questions per test
 
     # Create test attempts
     print(f"📊 Creating test attempts...")
@@ -441,7 +461,9 @@ async def main():
     # Create study materials
     print(f"📖 Creating study materials...")
     for course in courses:
-        await create_study_materials(5, course, random.choice(users))  # 5 materials per course
+        await create_study_materials(
+            5, course, random.choice(users)
+        )  # 5 materials per course
 
     # Create user analytics
     print(f"📈 Creating user analytics...")

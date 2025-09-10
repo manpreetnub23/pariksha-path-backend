@@ -13,13 +13,12 @@ class ExamSubCategory(BaseModel):
     icon_url: Optional[str] = None
 
 
-class Course(Document):
+class Exam(Document):
     # Basic info
     title: str
-    code: str  # Unique course code
+    code: str  # Unique exam code
     category: ExamCategory
     sub_category: str  # Specific exam (e.g., "NEET", "JEE Main")
-    sections: List[str] = []
 
     # Content details
     description: str
@@ -39,7 +38,7 @@ class Course(Document):
     icon_url: Optional[str] = None
     priority_order: int = 0  # For display ordering on frontend
     banner_url: Optional[str] = None  # Hero banner image
-    tagline: Optional[str] = None  # Course tagline for marketing
+    tagline: Optional[str] = None  # Exam tagline for marketing
 
     # Stats
     enrolled_students_count: int = 0
@@ -53,7 +52,7 @@ class Course(Document):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:
-        name = "courses"
+        name = "exams"
 
     def update_timestamp(self):
         self.updated_at = datetime.now(timezone.utc)
