@@ -1,8 +1,23 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Depends, status, Query
-from typing import List, Optional, Dict, Any
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Depends,
+    status,
+    Query,
+    UploadFile,
+    File,
+    Form,
+)
+from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel, Field
+import csv
+import io
+from datetime import datetime
+from bson import ObjectId
+
 from ..models.course import Course, ExamSubCategory
+from ..models.question import Question
 from ..models.admin_action import AdminAction, ActionType
 from ..models.user import User
 from ..models.enums import ExamCategory
@@ -873,7 +888,7 @@ async def remove_material_from_course(
     "/{course_id}/test-series/{test_series_id}",
     response_model=Dict[str, Any],
     summary="Remove test series from course",
-    description="Admin endpoint to remove test series from a course",
+    description="Admin endpoint to remove a test series from a course",
 )
 async def remove_test_series_from_course(
     course_id: str,
@@ -882,25 +897,24 @@ async def remove_test_series_from_course(
 ):
     """Remove test series from a course (Admin only)"""
     try:
+        # Validate course_id format
+        if not ObjectId.is_valid(course_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid course ID format",
+            )
+
+        # Find the course
         course = await Course.get(course_id)
         if not course:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Course not found",
+                status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
             )
 
-        # Check if test series exists in course
-        if test_series_id not in course.test_series_ids:
-            return {
-                "message": "Test series not found in this course",
-                "course_id": course_id,
-                "test_series_id": test_series_id,
-            }
-
-        # Remove test series from course
-        course.test_series_ids.remove(test_series_id)
-        course.update_timestamp()
-        await course.save()
+        # Remove test series ID if it exists
+        if test_series_id in course.test_series_ids:
+            course.test_series_ids.remove(test_series_id)
+            await course.save()
 
         # Log admin action
         admin_action = AdminAction(
@@ -912,16 +926,119 @@ async def remove_test_series_from_course(
         )
         await admin_action.insert()
 
-        return {
-            "message": "Test series removed from course successfully",
-            "course_id": course_id,
-            "test_series_id": test_series_id,
-        }
-
-    except HTTPException as e:
-        raise e
+        return {"status": "success", "message": "Test series removed from course"}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to remove test series from course: {str(e)}",
+        )
+
+
+@router.post(
+    "/upload-questions",
+    response_model=Dict[str, Any],
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload questions to a course section",
+    description="Upload questions to a specific section in a course via CSV",
+)
+async def upload_questions_to_section(
+    file: UploadFile = File(...),
+    course_id: str = Form(...),
+    section: str = Form(...),
+    current_user: User = Depends(admin_required),
+):
+    """Upload questions to a specific section in a course"""
+    try:
+        # Validate course_id
+        if not ObjectId.is_valid(course_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid course ID format",
+            )
+
+        # Get the course
+        course = await Course.get(course_id)
+        if not course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+            )
+
+        # Validate section exists in course
+        if not course.sections or section not in course.sections:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Section '{section}' not found in course",
+            )
+
+        # Read and parse CSV file
+        contents = await file.read()
+        text = contents.decode("utf-8")
+        csv_reader = csv.DictReader(io.StringIO(text))
+
+        questions = []
+        for row in csv_reader:
+            try:
+                # Extract options, filtering out empty ones
+                options = []
+                for opt in [
+                    row.get("option_a", ""),
+                    row.get("option_b", ""),
+                    row.get("option_c", ""),
+                    row.get("option_d", ""),
+                ]:
+                    if opt and str(opt).strip():
+                        options.append(str(opt).strip())
+
+                # Map CSV row to Question model
+                question = Question(
+                    question_text=row.get("question", "").strip(),
+                    options=options,
+                    correct_answers=[row.get("correct_answer", "").strip()],
+                    explanation=row.get("explanation", "").strip(),
+                    difficulty="medium",  # Default difficulty
+                    tags=[],  # No tags in the new format
+                    course_id=course_id,
+                    section=section,
+                    question_type="single_choice",  # Default to single choice
+                    marks=float(row.get("marks", 1.0)),
+                    created_by=str(current_user.id),
+                    updated_at=datetime.utcnow(),
+                    remarks=row.get("remarks", "").strip(),
+                )
+                questions.append(question)
+            except Exception as e:
+                print(f"Error processing row: {row}. Error: {str(e)}")
+                continue
+
+        # Save questions to database
+        if questions:
+            await Question.insert_many(questions)
+
+        # Log admin action
+        admin_action = AdminAction(
+            admin_id=str(current_user.id),
+            action_type=ActionType.CREATE,
+            target_collection="questions",
+            target_id=course_id,
+            changes={
+                "action": "questions_uploaded",
+                "count": len(questions),
+                "section": section,
+            },
+        )
+        await admin_action.insert()
+
+        return {
+            "status": "success",
+            "message": f"Successfully uploaded {len(questions)} questions to section '{section}'",
+            "count": len(questions),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in upload_questions_to_section: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload questions: {str(e)}",
         )
