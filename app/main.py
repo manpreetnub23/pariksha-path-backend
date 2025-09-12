@@ -194,66 +194,114 @@ async def get_courses(
 ):
     """Get all available courses with filtering and pagination"""
     try:
+        print("🔍 DEBUG [main.py]: get_courses endpoint called")
+        print(f"🔍 DEBUG [main.py]: current_user = {current_user}")
+
         query_filters = {"is_active": True}
 
         if category:
             query_filters["category"] = category
+            print(f"🔍 DEBUG [main.py]: Added category filter: {category}")
 
         if is_free is not None:
             query_filters["is_free"] = is_free
+            print(f"🔍 DEBUG [main.py]: Added is_free filter: {is_free}")
 
         if search:
             query_filters["$or"] = [
                 {"title": {"$regex": search, "$options": "i"}},
                 {"description": {"$regex": search, "$options": "i"}},
             ]
+            print(f"🔍 DEBUG [main.py]: Added search filter: {search}")
 
         skip = (page - 1) * limit
-        sort_direction = 1 if sort_order == "asc" else -1
-
-        courses = (
-            await Course.find(query_filters)
-            .sort([(sort_by, sort_direction)])
-            .skip(skip)
-            .limit(limit)
-            .to_list()
+        print(
+            f"🔍 DEBUG [main.py]: Pagination: page={page}, limit={limit}, skip={skip}"
         )
 
-        total_courses = await Course.find(query_filters).count()
-        total_pages = (total_courses + limit - 1) // limit
+        sort_direction = 1 if sort_order == "asc" else -1
+        print(f"🔍 DEBUG [main.py]: Sorting by {sort_by} in {sort_order} order")
 
-        course_list = []
-        for course in courses:
-            course_list.append(
-                {
-                    "id": str(course.id),
-                    "title": course.title,
-                    "code": course.code,
-                    "category": course.category.value,
-                    "sub_category": course.sub_category,
-                    "description": course.description,
-                    "price": course.price,
-                    "is_free": course.is_free,
-                    "discount_percent": course.discount_percent,
-                    "thumbnail_url": course.thumbnail_url,
-                    "material_count": len(course.material_ids),
-                    "test_series_count": len(course.test_series_ids),
-                    "enrolled_students_count": course.enrolled_students_count,
-                }
+        print(f"🔍 DEBUG [main.py]: Final query filters: {query_filters}")
+
+        try:
+            print("🔍 DEBUG [main.py]: Fetching courses from database...")
+            courses = (
+                await Course.find(query_filters)
+                .sort([(sort_by, sort_direction)])
+                .skip(skip)
+                .limit(limit)
+                .to_list()
+            )
+            print(f"🔍 DEBUG [main.py]: Found {len(courses)} courses")
+
+            print("🔍 DEBUG [main.py]: Counting total courses...")
+            total_courses = await Course.find(query_filters).count()
+            total_pages = (total_courses + limit - 1) // limit
+            print(
+                f"🔍 DEBUG [main.py]: Total courses: {total_courses}, Total pages: {total_pages}"
             )
 
-        return {
-            "message": "Courses retrieved successfully",
-            "courses": course_list,
-            "pagination": {
-                "total": total_courses,
-                "page": page,
-                "limit": limit,
-                "total_pages": total_pages,
-            },
-        }
+            print("🔍 DEBUG [main.py]: Converting course objects to response format...")
+            course_list = []
+
+            for course in courses:
+                try:
+                    course_data = {
+                        "id": str(course.id),
+                        "title": course.title,
+                        "code": course.code,
+                        "category": course.category.value,
+                        "sub_category": course.sub_category,
+                        "description": course.description,
+                        "sections": getattr(course, "sections", []),
+                        "price": course.price,
+                        "is_free": course.is_free,
+                        "discount_percent": course.discount_percent,
+                        "thumbnail_url": course.thumbnail_url,
+                        "material_count": len(getattr(course, "material_ids", [])),
+                        "test_series_count": len(
+                            getattr(course, "test_series_ids", [])
+                        ),
+                        "enrolled_students_count": getattr(
+                            course, "enrolled_students_count", 0
+                        ),
+                    }
+                    course_list.append(course_data)
+                except Exception as e:
+                    print(
+                        f"🔍 DEBUG [main.py]: Error processing course {course.id}: {str(e)}"
+                    )
+                    import traceback
+
+                    print(f"🔍 DEBUG [main.py]: {traceback.format_exc()}")
+
+            print("🔍 DEBUG [main.py]: Successfully created response")
+
+            return {
+                "message": "Courses retrieved successfully",
+                "courses": course_list,
+                "pagination": {
+                    "total": total_courses,
+                    "page": page,
+                    "limit": limit,
+                    "total_pages": total_pages,
+                },
+            }
+
+        except Exception as e:
+            print(f"🔍 DEBUG [main.py]: Error in database operations: {str(e)}")
+            import traceback
+
+            print(f"🔍 DEBUG [main.py]: {traceback.format_exc()}")
+            raise
 
     except Exception as e:
+        print(f"🔍 DEBUG [main.py]: Unhandled exception in get_courses: {str(e)}")
+        import traceback
+
+        print(f"🔍 DEBUG [main.py]: {traceback.format_exc()}")
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve courses: {str(e)}",

@@ -24,7 +24,8 @@ class Question(BaseDocument):
     difficulty_level: DifficultyLevel
 
     # Classification
-    exam_type: str  # e.g., "NEET", "JEE Main", "SSC CGL"
+    course_id: str  # Reference to the course/exam this question belongs to
+    section: str  # Section within the course (e.g., "Physics", "Chemistry")
     exam_year: Optional[int] = None  # For PYQs, null for current year
 
     # Content - Updated to support multiple correct answers
@@ -35,6 +36,18 @@ class Question(BaseDocument):
     subject: str  # e.g., "Physics", "Chemistry", "Mathematics"
     topic: str  # e.g., "Mechanics", "Organic Chemistry"
     tags: List[str] = []
+
+    # Indexes for faster querying
+    class Settings:
+        indexes = [
+            [
+                ("course_id", 1),
+                ("section", 1),
+            ],  # Compound index for course+section queries
+            "subject",
+            "topic",
+        ]
+
     metadata: Optional[Dict[str, Any]] = (
         {}
     )  # For storing additional data like image URLs
