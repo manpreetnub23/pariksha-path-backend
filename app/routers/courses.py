@@ -16,8 +16,8 @@ import io
 from datetime import datetime
 from bson import ObjectId
 
-from ..models.course import Course, ExamSubCategory
-from ..models.question import Question
+from ..models.course import Course, ExamSubCategory, Section
+from ..models.question import Question, QuestionType, DifficultyLevel
 from ..models.admin_action import AdminAction, ActionType
 from ..models.user import User
 from ..models.enums import ExamCategory
@@ -141,6 +141,18 @@ async def create_course(
                 detail="Course with this code already exists",
             )
 
+        # Convert string sections to Section objects
+        section_objects = []
+        for i, section_name in enumerate(course_data.sections):
+            section_objects.append(
+                Section(
+                    name=section_name,
+                    description=f"Section {i + 1}: {section_name}",
+                    order=i + 1,
+                    question_count=0,
+                )
+            )
+
         # Create new course
         new_course = Course(
             title=course_data.title,
@@ -148,7 +160,7 @@ async def create_course(
             category=course_data.category,
             sub_category=course_data.sub_category,
             description=course_data.description,
-            sections=course_data.sections,
+            sections=section_objects,
             price=course_data.price,
             is_free=course_data.is_free,
             discount_percent=course_data.discount_percent,
@@ -287,6 +299,9 @@ async def list_courses(
 
             for course in courses:
                 try:
+                    # Convert Section objects to strings for response
+                    sections_list = course.get_section_names()
+
                     course_data = {
                         "id": str(course.id),
                         "title": course.title,
@@ -294,7 +309,7 @@ async def list_courses(
                         "category": course.category.value,
                         "sub_category": course.sub_category,
                         "description": course.description,
-                        "sections": getattr(course, "sections", []),
+                        "sections": sections_list,
                         "price": course.price,
                         "is_free": course.is_free,
                         "discount_percent": course.discount_percent,
@@ -389,22 +404,26 @@ async def get_enrolled_courses(current_user: User = Depends(get_current_user)):
         ).to_list()
 
         # Convert course objects to response format
-        course_responses = [
-            {
-                "id": str(course.id),
-                "title": course.title,
-                "code": course.code,
-                "category": course.category.value,
-                "sub_category": course.sub_category,
-                "description": course.description,
-                "sections": getattr(course, "sections", []),
-                "thumbnail_url": course.thumbnail_url,
-                "icon_url": course.icon_url,
-                "material_ids": course.material_ids,
-                "test_series_ids": course.test_series_ids,
-            }
-            for course in courses
-        ]
+        course_responses = []
+        for course in courses:
+            # Convert Section objects to strings for response
+            sections_list = course.get_section_names()
+
+            course_responses.append(
+                {
+                    "id": str(course.id),
+                    "title": course.title,
+                    "code": course.code,
+                    "category": course.category.value,
+                    "sub_category": course.sub_category,
+                    "description": course.description,
+                    "sections": sections_list,
+                    "thumbnail_url": course.thumbnail_url,
+                    "icon_url": course.icon_url,
+                    "material_ids": course.material_ids,
+                    "test_series_ids": course.test_series_ids,
+                }
+            )
 
         return {
             "message": "Enrolled courses retrieved successfully",
@@ -439,6 +458,9 @@ async def get_course(course_id: str):
         # For inactive courses, only admins should be able to view them
         # This is handled in the frontend by checking user role
 
+        # Convert Section objects to strings for response
+        sections_list = course.get_section_names()
+
         return {
             "message": "Course retrieved successfully",
             "course": {
@@ -448,7 +470,7 @@ async def get_course(course_id: str):
                 "category": course.category.value,
                 "sub_category": course.sub_category,
                 "description": course.description,
-                "sections": getattr(course, "sections", []),
+                "sections": sections_list,
                 "price": course.price,
                 "is_free": course.is_free,
                 "discount_percent": course.discount_percent,
@@ -964,7 +986,8 @@ async def upload_questions_to_section(
             )
 
         # Validate section exists in course
-        if not course.sections or section not in course.sections:
+        section_names = course.get_section_names()
+        if not section_names or section not in section_names:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Section '{section}' not found in course",
@@ -978,32 +1001,41 @@ async def upload_questions_to_section(
         questions = []
         for row in csv_reader:
             try:
-                # Extract options, filtering out empty ones
+                # Extract options with correct format
                 options = []
-                for opt in [
-                    row.get("option_a", ""),
-                    row.get("option_b", ""),
-                    row.get("option_c", ""),
-                    row.get("option_d", ""),
-                ]:
-                    if opt and str(opt).strip():
-                        options.append(str(opt).strip())
+                correct_answer = row.get("correct_answer", "").strip().upper()
+
+                for i, opt_key in enumerate(
+                    ["option_a", "option_b", "option_c", "option_d"]
+                ):
+                    opt_text = row.get(opt_key, "").strip()
+                    if opt_text:
+                        option_letter = chr(65 + i)  # A, B, C, D
+                        options.append(
+                            {
+                                "text": opt_text,
+                                "is_correct": option_letter == correct_answer,
+                            }
+                        )
+
+                # Get question text and create title
+                question_text = row.get("question", "").strip()
+                title = question_text[:50] + ("..." if len(question_text) > 50 else "")
 
                 # Map CSV row to Question model
                 question = Question(
-                    question_text=row.get("question", "").strip(),
-                    options=options,
-                    correct_answers=[row.get("correct_answer", "").strip()],
-                    explanation=row.get("explanation", "").strip(),
-                    difficulty="medium",  # Default difficulty
-                    tags=[],  # No tags in the new format
+                    title=title,
+                    question_text=question_text,
+                    question_type=QuestionType.MCQ,
+                    difficulty_level=DifficultyLevel.MEDIUM,  # Default difficulty
                     course_id=course_id,
                     section=section,
-                    question_type="single_choice",  # Default to single choice
-                    marks=float(row.get("marks", 1.0)),
+                    options=options,
+                    explanation=row.get("explanation", "").strip() or None,
+                    subject=row.get("subject", "General").strip(),
+                    topic=row.get("topic", "General").strip(),
+                    tags=[],
                     created_by=str(current_user.id),
-                    updated_at=datetime.utcnow(),
-                    remarks=row.get("remarks", "").strip(),
                 )
                 questions.append(question)
             except Exception as e:
@@ -1041,4 +1073,251 @@ async def upload_questions_to_section(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload questions: {str(e)}",
+        )
+
+
+# Endpoint to get questions for a specific course section
+@router.get(
+    "/{course_id}/sections/{section_name}/questions",
+    response_model=Dict[str, Any],
+    summary="Get questions for course section",
+    description="Get all questions for a specific section in a course",
+)
+async def get_section_questions(
+    course_id: str,
+    section_name: str,
+    page: int = Query(1, description="Page number", ge=1),
+    limit: int = Query(10, description="Items per page", ge=1, le=100),
+    difficulty: Optional[str] = Query(None, description="Filter by difficulty"),
+    topic: Optional[str] = Query(None, description="Filter by topic"),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    """Get questions for a specific section in a course"""
+    try:
+        # Validate course_id
+        if not ObjectId.is_valid(course_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid course ID format",
+            )
+
+        # Get the course
+        course = await Course.get(course_id)
+        if not course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+            )
+
+        # Check if section exists in course
+        section_names = course.get_section_names()
+        if not section_names or section_name not in section_names:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Section '{section_name}' not found in course",
+            )
+
+        # Build query filters
+        query_filters = {
+            "course_id": course_id,
+            "section": section_name,
+        }
+
+        if difficulty:
+            query_filters["difficulty_level"] = difficulty.upper()
+
+        if topic:
+            query_filters["topic"] = {"$regex": topic, "$options": "i"}
+
+        # Calculate pagination
+        skip = (page - 1) * limit
+
+        # Fetch questions
+        questions = (
+            await Question.find(query_filters)
+            .sort([("created_at", -1)])
+            .skip(skip)
+            .limit(limit)
+            .to_list()
+        )
+
+        # Count total questions for pagination
+        total_questions = await Question.find(query_filters).count()
+        total_pages = (total_questions + limit - 1) // limit
+
+        # Format questions for response
+        question_data = []
+        for q in questions:
+            question_data.append(
+                {
+                    "id": str(q.id),
+                    "title": q.title,
+                    "question_text": q.question_text,
+                    "question_type": q.question_type,
+                    "difficulty_level": q.difficulty_level,
+                    "options": q.options,
+                    "explanation": q.explanation,
+                    "subject": q.subject,
+                    "topic": q.topic,
+                    "tags": q.tags,
+                    "marks": getattr(q, "marks", 1.0),
+                    "created_at": q.created_at,
+                }
+            )
+
+        return {
+            "message": f"Questions for section '{section_name}' retrieved successfully",
+            "course": {
+                "id": str(course.id),
+                "title": course.title,
+                "code": course.code,
+            },
+            "section": section_name,
+            "questions": question_data,
+            "pagination": {
+                "total": total_questions,
+                "page": page,
+                "limit": limit,
+                "total_pages": total_pages,
+            },
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve section questions: {str(e)}",
+        )
+
+
+# Endpoint to get section details
+@router.get(
+    "/{course_id}/sections/{section_name}",
+    response_model=Dict[str, Any],
+    summary="Get section details",
+    description="Get details about a specific section in a course",
+)
+async def get_section_details(
+    course_id: str,
+    section_name: str,
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    """Get details for a specific section in a course"""
+    try:
+        # Validate course_id
+        if not ObjectId.is_valid(course_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid course ID format",
+            )
+
+        # Get the course
+        course = await Course.get(course_id)
+        if not course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+            )
+
+        # Find the section
+        section = course.get_section(section_name)
+        if not section:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Section '{section_name}' not found in course",
+            )
+
+        # Get question count for this section
+        question_count = await Question.find(
+            {
+                "course_id": course_id,
+                "section": section_name,
+            }
+        ).count()
+
+        return {
+            "message": f"Section '{section_name}' details retrieved successfully",
+            "course": {
+                "id": str(course.id),
+                "title": course.title,
+                "code": course.code,
+            },
+            "section": {
+                "name": section.name,
+                "description": section.description,
+                "question_count": question_count,
+                "order": section.order,
+            },
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve section details: {str(e)}",
+        )
+
+
+# Endpoint to list all sections for a course
+@router.get(
+    "/{course_id}/sections",
+    response_model=Dict[str, Any],
+    summary="List course sections",
+    description="Get all sections for a specific course",
+)
+async def list_course_sections(
+    course_id: str,
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    """List all sections for a course"""
+    try:
+        # Validate course_id
+        if not ObjectId.is_valid(course_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid course ID format",
+            )
+
+        # Get the course
+        course = await Course.get(course_id)
+        if not course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+            )
+
+        # Get question counts for each section
+        sections_with_counts = []
+        for section in course.sections:
+            question_count = await Question.find(
+                {
+                    "course_id": course_id,
+                    "section": section.name,
+                }
+            ).count()
+
+            sections_with_counts.append(
+                {
+                    "name": section.name,
+                    "description": section.description,
+                    "question_count": question_count,
+                    "order": section.order,
+                }
+            )
+
+        return {
+            "message": f"Sections for course '{course.title}' retrieved successfully",
+            "course": {
+                "id": str(course.id),
+                "title": course.title,
+                "code": course.code,
+            },
+            "sections": sections_with_counts,
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve course sections: {str(e)}",
         )
