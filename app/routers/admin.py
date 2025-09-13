@@ -1194,6 +1194,68 @@ async def get_question(
         )
 
 
+@router.delete(
+    "/questions/{question_id}",
+    response_model=Dict[str, Any],
+    summary="Delete question",
+    description="Admin endpoint to delete a question",
+)
+async def delete_question(
+    question_id: str,
+    current_user: User = Depends(admin_required),
+):
+    """Delete a question (Admin only)"""
+    try:
+        # Find the question
+        question = await Question.get(question_id)
+        if not question:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Question not found",
+            )
+
+        # Store question details for audit log
+        question_details = {
+            "title": question.title,
+            "question_text": question.question_text,
+            "subject": question.subject,
+            "topic": question.topic,
+            "section": question.section,
+        }
+
+        # Delete the question
+        await question.delete()
+
+        # Log admin action
+        admin_action = AdminAction(
+            admin_id=str(current_user.id),
+            action_type=ActionType.DELETE,
+            target_collection="questions",
+            target_id=question_id,
+            changes={"deleted_question": question_details},
+        )
+        await admin_action.insert()
+
+        return {
+            "message": "Question deleted successfully",
+            "question_id": question_id,
+            "deleted_question": question_details,
+        }
+
+    except HTTPException as e:
+        print(f"HTTP Exception in delete_question: {str(e)}")  # Debug log
+        raise e
+    except Exception as e:
+        print(f"Unexpected error in delete_question: {str(e)}")  # Debug log
+        import traceback
+
+        traceback.print_exc()  # Print full traceback
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete question: {str(e)}",
+        )
+
+
 @router.post(
     "/create-admin",
     response_model=Dict[str, Any],
