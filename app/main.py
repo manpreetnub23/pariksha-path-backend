@@ -194,38 +194,26 @@ async def get_courses(
 ):
     """Get all available courses with filtering and pagination"""
     try:
-        print("🔍 DEBUG [main.py]: get_courses endpoint called")
-        print(f"🔍 DEBUG [main.py]: current_user = {current_user}")
 
         query_filters = {"is_active": True}
 
         if category:
             query_filters["category"] = category
-            print(f"🔍 DEBUG [main.py]: Added category filter: {category}")
 
         if is_free is not None:
             query_filters["is_free"] = is_free
-            print(f"🔍 DEBUG [main.py]: Added is_free filter: {is_free}")
 
         if search:
             query_filters["$or"] = [
                 {"title": {"$regex": search, "$options": "i"}},
                 {"description": {"$regex": search, "$options": "i"}},
             ]
-            print(f"🔍 DEBUG [main.py]: Added search filter: {search}")
 
         skip = (page - 1) * limit
-        print(
-            f"🔍 DEBUG [main.py]: Pagination: page={page}, limit={limit}, skip={skip}"
-        )
 
         sort_direction = 1 if sort_order == "asc" else -1
-        print(f"🔍 DEBUG [main.py]: Sorting by {sort_by} in {sort_order} order")
-
-        print(f"🔍 DEBUG [main.py]: Final query filters: {query_filters}")
 
         try:
-            print("🔍 DEBUG [main.py]: Fetching courses from database...")
             courses = (
                 await Course.find(query_filters)
                 .sort([(sort_by, sort_direction)])
@@ -233,16 +221,10 @@ async def get_courses(
                 .limit(limit)
                 .to_list()
             )
-            print(f"🔍 DEBUG [main.py]: Found {len(courses)} courses")
 
-            print("🔍 DEBUG [main.py]: Counting total courses...")
             total_courses = await Course.find(query_filters).count()
             total_pages = (total_courses + limit - 1) // limit
-            print(
-                f"🔍 DEBUG [main.py]: Total courses: {total_courses}, Total pages: {total_pages}"
-            )
 
-            print("🔍 DEBUG [main.py]: Converting course objects to response format...")
             course_list = []
 
             for course in courses:
@@ -269,14 +251,8 @@ async def get_courses(
                     }
                     course_list.append(course_data)
                 except Exception as e:
-                    print(
-                        f"🔍 DEBUG [main.py]: Error processing course {course.id}: {str(e)}"
-                    )
+
                     import traceback
-
-                    print(f"🔍 DEBUG [main.py]: {traceback.format_exc()}")
-
-            print("🔍 DEBUG [main.py]: Successfully created response")
 
             return {
                 "message": "Courses retrieved successfully",
@@ -290,17 +266,12 @@ async def get_courses(
             }
 
         except Exception as e:
-            print(f"🔍 DEBUG [main.py]: Error in database operations: {str(e)}")
             import traceback
 
-            print(f"🔍 DEBUG [main.py]: {traceback.format_exc()}")
             raise
 
     except Exception as e:
-        print(f"🔍 DEBUG [main.py]: Unhandled exception in get_courses: {str(e)}")
         import traceback
-
-        print(f"🔍 DEBUG [main.py]: {traceback.format_exc()}")
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

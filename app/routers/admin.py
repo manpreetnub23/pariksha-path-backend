@@ -125,7 +125,6 @@ class QuestionUpdateRequest(BaseModel):
     question_text: Optional[str] = None
     question_type: Optional[QuestionType] = None
     difficulty_level: Optional[DifficultyLevel] = None
-    exam_type: Optional[str] = None
     exam_year: Optional[int] = None
     options: Optional[List[OptionModel]] = None
     explanation: Optional[str] = None
@@ -141,7 +140,6 @@ class QuestionResponse(BaseModel):
     question_text: str
     question_type: str
     difficulty_level: str
-    exam_type: str
     exam_year: Optional[int]
     options: List[Dict[str, Any]]
     explanation: Optional[str]
@@ -689,6 +687,7 @@ async def get_student_analytics(
             detail=f"Failed to retrieve student analytics: {str(e)}",
         )
 
+
 @router.post(
     "/import-questions",
     response_model=dict,
@@ -749,22 +748,6 @@ async def import_questions_from_csv(
     # For now, return a success response since the actual CSV processing is commented out
 
     try:
-        # Debug: Log incoming form data
-        print("\n=== Incoming Request Data ===")
-        print(f"Test Title: {test_title}")
-        print(f"Exam Category: {exam_category} (type: {type(exam_category)})")
-        print(f"Exam Subcategory: {exam_subcategory} (type: {type(exam_subcategory)})")
-        print(f"Subject: {subject} (type: {type(subject)})")
-        print(f"Topic: {topic} (type: {type(topic)})")
-        print(f"Difficulty: {difficulty} (type: {type(difficulty)})")
-        print(f"Duration: {duration_minutes} minutes (type: {type(duration_minutes)})")
-        print(f"Is Free: {is_free} (type: {type(is_free)})")
-        print(f"Existing Test ID: {existing_test_id} (type: {type(existing_test_id)})")
-
-        print("\n=== File Info ===")
-        print(f"Filename: {file.filename} (type: {type(file.filename)})")
-        print(f"Content Type: {file.content_type} (type: {type(file.content_type)})")
-
         # Check if file is provided
         if not file:
             raise HTTPException(
@@ -1038,6 +1021,176 @@ async def get_test_questions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve test questions: {str(e)}",
+        )
+
+
+@router.put(
+    "/questions/{question_id}",
+    response_model=Dict[str, Any],
+    summary="Update question",
+    description="Admin endpoint to update a question",
+)
+async def update_question(
+    question_id: str,
+    question_data: QuestionUpdateRequest,
+    current_user: User = Depends(admin_required),
+):
+    """Update a question (Admin only)"""
+    try:
+        # Find the question
+        question = await Question.get(question_id)
+        if not question:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Question not found",
+            )
+
+        # Track changes for audit log
+        changes = {}
+
+        # Update fields if provided
+        update_dict = question_data.dict(exclude_unset=True)
+        print(f"Update data received: {update_dict}")  # Debug log
+
+        for field, value in update_dict.items():
+            if value is not None:
+                # Special handling for options to ensure correct format
+                if field == "options" and isinstance(value, list):
+                    # Validate options format
+                    for option in value:
+                        if (
+                            not isinstance(option, dict)
+                            or "text" not in option
+                            or "is_correct" not in option
+                        ):
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="Invalid options format. Each option must have 'text' and 'is_correct' fields",
+                            )
+
+                # Handle field mapping for enum fields
+                if field == "question_type" and isinstance(value, str):
+                    try:
+                        value = QuestionType(value)
+                    except ValueError:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Invalid question_type: {value}. Must be one of {[t.value for t in QuestionType]}",
+                        )
+
+                if field == "difficulty_level" and isinstance(value, str):
+                    try:
+                        value = DifficultyLevel(value)
+                    except ValueError:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Invalid difficulty_level: {value}. Must be one of {[d.value for d in DifficultyLevel]}",
+                        )
+
+                # Set the new value
+                setattr(question, field, value)
+                changes[field] = (
+                    str(value) if not isinstance(value, list) else "updated"
+                )
+
+        # Only update if there are changes
+        if changes:
+            try:
+                question.update_timestamp()
+                await question.save()
+                print(f"Question {question_id} updated successfully")  # Debug log
+
+                # Log admin action
+                admin_action = AdminAction(
+                    admin_id=str(current_user.id),
+                    action_type=ActionType.UPDATE,
+                    target_collection="questions",
+                    target_id=question_id,
+                    changes=changes,
+                )
+                await admin_action.insert()
+
+                return {
+                    "message": "Question updated successfully",
+                    "question_id": question_id,
+                    "changes": changes,
+                }
+            except Exception as save_error:
+                print(f"Error saving question: {str(save_error)}")  # Debug log
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to save question: {str(save_error)}",
+                )
+        else:
+            return {
+                "message": "No changes to apply",
+                "question_id": question_id,
+            }
+
+    except HTTPException as e:
+        print(f"HTTP Exception in update_question: {str(e)}")  # Debug log
+        raise e
+    except Exception as e:
+        print(f"Unexpected error in update_question: {str(e)}")  # Debug log
+        import traceback
+
+        traceback.print_exc()  # Print full traceback
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update question: {str(e)}",
+        )
+
+
+@router.get(
+    "/questions/{question_id}",
+    response_model=Dict[str, Any],
+    summary="Get question details",
+    description="Admin endpoint to get detailed information about a specific question",
+)
+async def get_question(
+    question_id: str,
+    current_user: User = Depends(admin_required),
+):
+    """Get detailed information about a specific question (Admin only)"""
+    try:
+        # Find the question
+        question = await Question.get(question_id)
+        if not question:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Question not found",
+            )
+
+        # Convert to response format
+        question_response = QuestionResponse(
+            id=str(question.id),
+            title=question.title,
+            question_text=question.question_text,
+            question_type=question.question_type.value,
+            difficulty_level=question.difficulty_level.value,
+            exam_year=question.exam_year,
+            options=question.options,
+            explanation=question.explanation,
+            subject=question.subject,
+            topic=question.topic,
+            tags=question.tags,
+            is_active=question.is_active,
+            created_by=question.created_by,
+            created_at=question.created_at,
+            updated_at=question.updated_at,
+        )
+
+        return {
+            "message": "Question details retrieved successfully",
+            "question": question_response,
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve question details: {str(e)}",
         )
 
 

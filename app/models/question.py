@@ -31,7 +31,7 @@ class Question(BaseDocument):
     # Content - Updated to support multiple correct answers
     options: List[Dict] = []  # [{"text": "Option text", "is_correct": bool}]
     explanation: Optional[str] = None
-
+    remarks: Optional[str] = None
     # Metadata
     subject: str  # e.g., "Physics", "Chemistry", "Mathematics"
     topic: str  # e.g., "Mechanics", "Organic Chemistry"

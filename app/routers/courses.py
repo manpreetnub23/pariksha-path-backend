@@ -229,31 +229,23 @@ async def list_courses(
 ):
     """List all courses with filters and pagination"""
     try:
-        print("🔍 DEBUG: list_courses endpoint called")
-        print(f"🔍 DEBUG: current_user = {current_user}")
-
         # Build query filters
         query_filters = {}
 
         # Always filter by is_active=True for non-admin users
         if current_user is None or current_user.role != "admin":
             query_filters["is_active"] = True
-            print("🔍 DEBUG: Using is_active=True filter (non-admin user)")
         elif is_active is not None:
             query_filters["is_active"] = is_active
-            print(f"🔍 DEBUG: Using is_active={is_active} filter (admin user)")
 
         if category:
             query_filters["category"] = category
-            print(f"🔍 DEBUG: Added category filter: {category}")
 
         if section:
             query_filters["sections"] = {"$in": [section]}
-            print(f"🔍 DEBUG: Added section filter: {section}")
 
         if is_free is not None:
             query_filters["is_free"] = is_free
-            print(f"🔍 DEBUG: Added is_free filter: {is_free}")
 
         if search:
             # Search in title or description
@@ -261,21 +253,15 @@ async def list_courses(
                 {"title": {"$regex": search, "$options": "i"}},
                 {"description": {"$regex": search, "$options": "i"}},
             ]
-            print(f"🔍 DEBUG: Added search filter: {search}")
 
         # Calculate pagination
         skip = (page - 1) * limit
-        print(f"🔍 DEBUG: Pagination: page={page}, limit={limit}, skip={skip}")
 
         # Set sort order
         sort_direction = 1 if sort_order == "asc" else -1
-        print(f"🔍 DEBUG: Sorting by {sort_by} in {sort_order} order")
-
-        print(f"🔍 DEBUG: Final query filters: {query_filters}")
 
         try:
             # Fetch courses
-            print("🔍 DEBUG: Fetching courses from database...")
             courses = (
                 await Course.find(query_filters)
                 .sort([(sort_by, sort_direction)])
@@ -283,18 +269,12 @@ async def list_courses(
                 .limit(limit)
                 .to_list()
             )
-            print(f"🔍 DEBUG: Found {len(courses)} courses")
 
             # Count total matching courses for pagination info
-            print("🔍 DEBUG: Counting total courses...")
             total_courses = await Course.find(query_filters).count()
             total_pages = (total_courses + limit - 1) // limit
-            print(
-                f"🔍 DEBUG: Total courses: {total_courses}, Total pages: {total_pages}"
-            )
 
             # Convert course objects to response format
-            print("🔍 DEBUG: Converting course objects to response format...")
             course_responses = []
 
             for course in courses:
@@ -325,12 +305,7 @@ async def list_courses(
                     }
                     course_responses.append(course_data)
                 except Exception as e:
-                    print(f"🔍 DEBUG: Error processing course {course.id}: {str(e)}")
                     import traceback
-
-                    print(f"🔍 DEBUG: {traceback.format_exc()}")
-
-            print("🔍 DEBUG: Successfully created response")
 
             return {
                 "message": "Courses retrieved successfully",
@@ -344,17 +319,12 @@ async def list_courses(
             }
 
         except Exception as e:
-            print(f"🔍 DEBUG: Error in database operations: {str(e)}")
             import traceback
 
-            print(f"🔍 DEBUG: {traceback.format_exc()}")
             raise
 
     except Exception as e:
-        print(f"🔍 DEBUG: Unhandled exception in list_courses: {str(e)}")
         import traceback
-
-        print(f"🔍 DEBUG: {traceback.format_exc()}")
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1004,7 +974,7 @@ async def upload_questions_to_section(
                 # Extract options with correct format
                 options = []
                 correct_answer = row.get("correct_answer", "").strip().upper()
-
+                remarks = row.get("remarks", "").strip()
                 for i, opt_key in enumerate(
                     ["option_a", "option_b", "option_c", "option_d"]
                 ):
@@ -1032,6 +1002,7 @@ async def upload_questions_to_section(
                     section=section,
                     options=options,
                     explanation=row.get("explanation", "").strip() or None,
+                    remarks=remarks,
                     subject=row.get("subject", "General").strip(),
                     topic=row.get("topic", "General").strip(),
                     tags=[],
@@ -1320,4 +1291,261 @@ async def list_course_sections(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve course sections: {str(e)}",
+        )
+
+
+# Section Management Endpoints
+
+
+class SectionCreateRequest(BaseModel):
+    section_name: str
+
+
+class SectionUpdateRequest(BaseModel):
+    new_section_name: str
+
+
+@router.post(
+    "/{course_id}/sections",
+    response_model=Dict[str, Any],
+    status_code=status.HTTP_201_CREATED,
+    summary="Add section to course",
+    description="Admin endpoint to add a new section to a course",
+)
+async def add_section_to_course(
+    course_id: str,
+    section_data: SectionCreateRequest,
+    current_user: User = Depends(admin_required),
+):
+    """Add a new section to a course (Admin only)"""
+    try:
+        # Validate course_id
+        if not ObjectId.is_valid(course_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid course ID format",
+            )
+
+        # Get the course
+        course = await Course.get(course_id)
+        if not course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+            )
+
+        # Check if section already exists
+        if course.get_section(section_data.section_name):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Section with this name already exists",
+            )
+
+        # Create new section
+        new_section = Section(
+            name=section_data.section_name,
+            description=f"Section: {section_data.section_name}",
+            order=len(course.sections) + 1,
+            question_count=0,
+        )
+
+        # Add section to course
+        course.sections.append(new_section)
+        course.update_timestamp()
+        await course.save()
+
+        # Log admin action
+        admin_action = AdminAction(
+            admin_id=str(current_user.id),
+            action_type=ActionType.CREATE,
+            target_collection="courses",
+            target_id=course_id,
+            changes={
+                "action": "section_added",
+                "section_name": section_data.section_name,
+            },
+        )
+        await admin_action.insert()
+
+        return {
+            "message": f"Section '{section_data.section_name}' added successfully",
+            "course_id": course_id,
+            "section": {
+                "name": new_section.name,
+                "description": new_section.description,
+                "order": new_section.order,
+                "question_count": new_section.question_count,
+            },
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to add section: {str(e)}",
+        )
+
+
+@router.put(
+    "/{course_id}/sections/{section_name}",
+    response_model=Dict[str, Any],
+    summary="Update section name",
+    description="Admin endpoint to rename a section in a course",
+)
+async def update_section_in_course(
+    course_id: str,
+    section_name: str,
+    section_data: SectionUpdateRequest,
+    current_user: User = Depends(admin_required),
+):
+    """Update a section name in a course (Admin only)"""
+    try:
+        # Validate course_id
+        if not ObjectId.is_valid(course_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid course ID format",
+            )
+
+        # Get the course
+        course = await Course.get(course_id)
+        if not course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+            )
+
+        # Find the section
+        section = course.get_section(section_name)
+        if not section:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Section '{section_name}' not found",
+            )
+
+        # Check if new name already exists
+        if course.get_section(section_data.new_section_name):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Section with this name already exists",
+            )
+
+        # Update section name
+        old_name = section.name
+        section.name = section_data.new_section_name
+        section.description = f"Section: {section_data.new_section_name}"
+
+        # Update questions in this section to use new section name
+        await Question.find({"course_id": course_id, "section": old_name}).update_many(
+            {"$set": {"section": section_data.new_section_name}}
+        )
+
+        course.update_timestamp()
+        await course.save()
+
+        # Log admin action
+        admin_action = AdminAction(
+            admin_id=str(current_user.id),
+            action_type=ActionType.UPDATE,
+            target_collection="courses",
+            target_id=course_id,
+            changes={
+                "action": "section_renamed",
+                "old_name": old_name,
+                "new_name": section_data.new_section_name,
+            },
+        )
+        await admin_action.insert()
+
+        return {
+            "message": f"Section renamed from '{old_name}' to '{section_data.new_section_name}' successfully",
+            "course_id": course_id,
+            "old_name": old_name,
+            "new_name": section_data.new_section_name,
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update section: {str(e)}",
+        )
+
+
+@router.delete(
+    "/{course_id}/sections/{section_name}",
+    response_model=Dict[str, Any],
+    summary="Delete section from course",
+    description="Admin endpoint to delete a section and all its questions from a course",
+)
+async def delete_section_from_course(
+    course_id: str,
+    section_name: str,
+    current_user: User = Depends(admin_required),
+):
+    """Delete a section and all its questions from a course (Admin only)"""
+    try:
+        # Validate course_id
+        if not ObjectId.is_valid(course_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid course ID format",
+            )
+
+        # Get the course
+        course = await Course.get(course_id)
+        if not course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+            )
+
+        # Find the section
+        section = course.get_section(section_name)
+        if not section:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Section '{section_name}' not found",
+            )
+
+        # Delete all questions in this section
+        deleted_questions = await Question.find(
+            {"course_id": course_id, "section": section_name}
+        ).delete_many()
+
+        # Remove section from course
+        course.sections = [s for s in course.sections if s.name != section_name]
+
+        # Update order of remaining sections
+        for i, remaining_section in enumerate(course.sections):
+            remaining_section.order = i + 1
+
+        course.update_timestamp()
+        await course.save()
+
+        # Log admin action
+        admin_action = AdminAction(
+            admin_id=str(current_user.id),
+            action_type=ActionType.DELETE,
+            target_collection="courses",
+            target_id=course_id,
+            changes={
+                "action": "section_deleted",
+                "section_name": section_name,
+                "deleted_questions_count": deleted_questions,
+            },
+        )
+        await admin_action.insert()
+
+        return {
+            "message": f"Section '{section_name}' and {deleted_questions} questions deleted successfully",
+            "course_id": course_id,
+            "deleted_questions_count": deleted_questions,
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete section: {str(e)}",
         )
