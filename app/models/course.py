@@ -3,6 +3,7 @@ from pydantic import Field, BaseModel, validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 from .enums import ExamCategory
+import re
 
 
 class ExamSubCategory(BaseModel):

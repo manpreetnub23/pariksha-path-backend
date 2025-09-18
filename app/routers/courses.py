@@ -28,6 +28,9 @@ from ..models.admin_action import AdminAction, ActionType
 from ..models.user import User
 from ..models.enums import ExamCategory
 from ..dependencies import admin_required, get_current_user
+import re
+from fastapi import Body
+from app.config import settings
 
 router = APIRouter(prefix="/api/v1/courses", tags=["Courses"])
 
@@ -311,7 +314,8 @@ async def list_courses(
                         "category": course.category.value,
                         "sub_category": course.sub_category,
                         "description": course.description,
-                        "sections": sections_list,
+                        # "sections": sections_list,
+                        "sections": course.sections,
                         "price": course.price,
                         "is_free": course.is_free,
                         "discount_percent": course.discount_percent,
@@ -1092,6 +1096,7 @@ async def upload_questions_to_section(
         # Save questions to database
         if questions:
             await Question.insert_many(questions)
+        print("hello gurrakkha", questions)
 
         # Log admin action
         admin_action = AdminAction(
@@ -1124,11 +1129,153 @@ async def upload_questions_to_section(
 
 
 # Endpoint to get questions for a specific course section
+# @router.get(
+#     "/{course_id}/sections/{section_name}/questions",
+#     response_model=Dict[str, Any],
+#     summary="Get questions for course section",
+#     description="Get all questions for a specific section in a course",
+# )
+
+
+# async def get_section_questions(
+#     course_id: str,
+#     section_name: str,
+#     page: int = Query(1, description="Page number", ge=1),
+#     limit: int = Query(10, description="Items per page", ge=1, le=100),
+#     difficulty: Optional[str] = Query(None, description="Filter by difficulty"),
+#     topic: Optional[str] = Query(None, description="Filter by topic"),
+#     current_user: Optional[User] = Depends(get_current_user),
+# ):
+#     """Get questions for a specific section in a course"""
+#     try:
+#         # Validate course_id
+#         if not ObjectId.is_valid(course_id):
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail="Invalid course ID format",
+#             )
+
+#         # Get the course
+#         course = await Course.get(course_id)
+#         if not course:
+#             raise HTTPException(
+#                 status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+#             )
+
+#         # Check if section exists in course
+#         section_names = course.get_section_names()
+#         if not section_names or section_name not in section_names:
+#             raise HTTPException(
+#                 status_code=status.HTTP_404_NOT_FOUND,
+#                 detail=f"Section '{section_name}' not found in course",
+#             )
+
+#         # Build query filters
+#         query_filters = {
+#             "course_id": course_id,
+#             "section": section_name,
+#         }
+
+#         if difficulty:
+#             query_filters["difficulty_level"] = difficulty.upper()
+
+#         if topic:
+#             query_filters["topic"] = {"$regex": topic, "$options": "i"}
+
+#         # Calculate pagination
+#         skip = (page - 1) * limit
+
+#         # Fetch questions
+#         questions = (
+#             await Question.find(query_filters)
+#             .sort([("created_at", -1)])
+#             .skip(skip)
+#             .limit(limit)
+#             .to_list()
+#         )
+
+#         # Count total questions for pagination
+#         total_questions = await Question.find(query_filters).count()
+#         total_pages = (total_questions + limit - 1) // limit
+
+#         # Format questions for response
+#         question_data = []
+#         for q in questions:
+#             # Convert options to include images
+#             options_with_images = []
+#             for option in q.options:
+#                 option_dict = {
+#                     "text": option.text,
+#                     "is_correct": option.is_correct,
+#                     "images": [img.dict() for img in option.images],
+#                     "order": option.order,
+#                 }
+#                 options_with_images.append(option_dict)
+
+#             question_data.append(
+#                 {
+#                     "id": str(q.id),
+#                     "title": q.title,
+#                     "question_text": q.question_text,
+#                     "question_type": (
+#                         q.question_type.value
+#                         if hasattr(q.question_type, "value")
+#                         else str(q.question_type)
+#                     ),
+#                     "difficulty_level": (
+#                         q.difficulty_level.value
+#                         if hasattr(q.difficulty_level, "value")
+#                         else str(q.difficulty_level)
+#                     ),
+#                     "options": options_with_images,
+#                     "explanation": q.explanation,
+#                     "explanation_images": [img.dict() for img in q.explanation_images],
+#                     "remarks": q.remarks,
+#                     "remarks_images": [img.dict() for img in q.remarks_images],
+#                     "question_images": [img.dict() for img in q.question_images],
+#                     "subject": q.subject,
+#                     "topic": q.topic,
+#                     "tags": q.tags,
+#                     "marks": getattr(q, "marks", 1.0),
+#                     "created_at": q.created_at,
+#                     "updated_at": q.updated_at,
+#                     "is_active": q.is_active,
+#                     "created_by": q.created_by,
+#                 }
+#             )
+
+#         return {
+#             "message": f"Questions for section '{section_name}' retrieved successfully",
+#             "course": {
+#                 "id": str(course.id),
+#                 "title": course.title,
+#                 "code": course.code,
+#             },
+#             "section": section_name,
+#             "questions": question_data,
+#             "pagination": {
+#                 "total": total_questions,
+#                 "page": page,
+#                 "limit": limit,
+#                 "total_pages": total_pages,
+#             },
+#         }
+
+#     except HTTPException as e:
+#         raise e
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Failed to retrieve section questions: {str(e)}",
+#         )
+
+
+# added by manpreet 
 @router.get(
     "/{course_id}/sections/{section_name}/questions",
     response_model=Dict[str, Any],
     summary="Get questions for course section",
-    description="Get all questions for a specific section in a course",
+    description="Get all questions for a specific section in a course or random mock questions",
 )
 async def get_section_questions(
     course_id: str,
@@ -1137,130 +1284,192 @@ async def get_section_questions(
     limit: int = Query(10, description="Items per page", ge=1, le=100),
     difficulty: Optional[str] = Query(None, description="Filter by difficulty"),
     topic: Optional[str] = Query(None, description="Filter by topic"),
+    mode: Optional[str] = Query(None, description="Mode: normal | mock"),
     current_user: Optional[User] = Depends(get_current_user),
 ):
-    """Get questions for a specific section in a course"""
+    """
+    Get questions for a specific section in a course.
+    - `mode=normal` (default): Paginated, filtered results.
+    - `mode=mock`: Fetch random N questions based on section.question_count.
+    """
     try:
-        # Validate course_id
         if not ObjectId.is_valid(course_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid course ID format",
-            )
+            raise HTTPException(status_code=400, detail="Invalid course ID format")
 
-        # Get the course
         course = await Course.get(course_id)
         if not course:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
-            )
+            raise HTTPException(status_code=404, detail="Course not found")
 
-        # Check if section exists in course
-        section_names = course.get_section_names()
-        if not section_names or section_name not in section_names:
+        section = course.get_section(section_name)
+        if not section:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=404,
                 detail=f"Section '{section_name}' not found in course",
             )
 
-        # Build query filters
-        query_filters = {
-            "course_id": course_id,
-            "section": section_name,
-        }
-
-        if difficulty:
-            query_filters["difficulty_level"] = difficulty.upper()
-
-        if topic:
-            query_filters["topic"] = {"$regex": topic, "$options": "i"}
-
-        # Calculate pagination
-        skip = (page - 1) * limit
-
-        # Fetch questions
-        questions = (
-            await Question.find(query_filters)
-            .sort([("created_at", -1)])
-            .skip(skip)
-            .limit(limit)
-            .to_list()
-        )
-
-        # Count total questions for pagination
-        total_questions = await Question.find(query_filters).count()
-        total_pages = (total_questions + limit - 1) // limit
-
-        # Format questions for response
-        question_data = []
-        for q in questions:
-            # Convert options to include images
-            options_with_images = []
-            for option in q.options:
-                option_dict = {
-                    "text": option.text,
-                    "is_correct": option.is_correct,
-                    "images": [img.dict() for img in option.images],
-                    "order": option.order,
+        # --------------------------------
+        # MOCK MODE
+        # --------------------------------
+        if (mode or "").lower() == "mock":
+            question_limit = int(section.question_count or 0)
+            if question_limit <= 0:
+                return {
+                    "message": f"No questions configured for section '{section_name}'",
+                    "course": {"id": str(course.id), "title": course.title, "code": course.code},
+                    "section": section_name,
+                    "questions": [],
+                    "pagination": {"total": 0, "limit": question_limit, "page": 1, "total_pages": 0},
                 }
-                options_with_images.append(option_dict)
 
-            question_data.append(
-                {
-                    "id": str(q.id),
-                    "title": q.title,
-                    "question_text": q.question_text,
-                    "question_type": (
-                        q.question_type.value
-                        if hasattr(q.question_type, "value")
-                        else str(q.question_type)
-                    ),
-                    "difficulty_level": (
-                        q.difficulty_level.value
-                        if hasattr(q.difficulty_level, "value")
-                        else str(q.difficulty_level)
-                    ),
-                    "options": options_with_images,
-                    "explanation": q.explanation,
-                    "explanation_images": [img.dict() for img in q.explanation_images],
-                    "remarks": q.remarks,
-                    "remarks_images": [img.dict() for img in q.remarks_images],
-                    "question_images": [img.dict() for img in q.question_images],
-                    "subject": q.subject,
-                    "topic": q.topic,
-                    "tags": q.tags,
-                    "marks": getattr(q, "marks", 1.0),
-                    "created_at": q.created_at,
-                    "updated_at": q.updated_at,
-                    "is_active": q.is_active,
-                    "created_by": q.created_by,
-                }
+            from motor.motor_asyncio import AsyncIOMotorClient
+            _client = AsyncIOMotorClient(settings.MONGO_URI)
+            db = _client.get_default_database()
+            collection = db["questions"]
+
+            pipeline = [
+                {"$match": {"course_id": course_id, "section": section_name}},
+                {"$sample": {"size": question_limit}},
+            ]
+
+            cursor = collection.aggregate(pipeline)
+
+            questions = []
+            async for doc in cursor:
+                if "_id" in doc:
+                    doc["id"] = str(doc["_id"])
+                questions.append(doc)
+
+            total_questions = len(questions)
+            total_pages = 1
+
+        # --------------------------------
+        # NORMAL MODE
+        # --------------------------------
+        else:
+            query_filters = {"course_id": course_id, "section": section_name}
+            if difficulty:
+                query_filters["difficulty_level"] = difficulty.upper()
+            if topic:
+                query_filters["topic"] = {"$regex": topic, "$options": "i"}
+
+            skip = (page - 1) * limit
+            questions = (
+                await Question.find(query_filters)
+                .sort([("created_at", -1)])
+                .skip(skip)
+                .limit(limit)
+                .to_list()
             )
 
+            total_questions = await Question.find(query_filters).count()
+            total_pages = (total_questions + limit - 1) // limit
+
+        # --------------------------------
+        # FORMAT RESPONSE (handle dicts + Beanie models)
+        # --------------------------------
+        question_data = []
+        for q in questions:
+            if isinstance(q, dict):  # MOCK MODE
+                options_with_images = [
+                    {
+                        "text": opt.get("text"),
+                        "is_correct": opt.get("is_correct", False),
+                        "images": opt.get("images", []),
+                        "order": opt.get("order"),
+                    }
+                    for opt in q.get("options", [])
+                ]
+
+                question_data.append(
+                    {
+                        "id": str(q.get("id", q.get("_id"))),
+                        "title": q.get("title"),
+                        "question_text": q.get("question_text"),
+                        "question_type": q.get("question_type"),
+                        "difficulty_level": q.get("difficulty_level"),
+                        "options": options_with_images,
+                        "explanation": q.get("explanation"),
+                        "explanation_images": q.get("explanation_images", []),
+                        "remarks": q.get("remarks"),
+                        "remarks_images": q.get("remarks_images", []),
+                        "question_images": q.get("question_images", []),
+                        "subject": q.get("subject"),
+                        "topic": q.get("topic"),
+                        "tags": q.get("tags", []),
+                        "marks": q.get("marks", 1.0),
+                        "created_at": q.get("created_at"),
+                        "updated_at": q.get("updated_at"),
+                        "is_active": q.get("is_active", True),
+                        "created_by": q.get("created_by"),
+                    }
+                )
+            else:  # NORMAL MODE
+                options_with_images = [
+                    {
+                        "text": option.text,
+                        "is_correct": option.is_correct,
+                        "images": [img.dict() for img in option.images],
+                        "order": option.order,
+                    }
+                    for option in q.options
+                ]
+
+                question_data.append(
+                    {
+                        "id": str(q.id),
+                        "title": q.title,
+                        "question_text": q.question_text,
+                        "question_type": getattr(q.question_type, "value", str(q.question_type)),
+                        "difficulty_level": getattr(q.difficulty_level, "value", str(q.difficulty_level)),
+                        "options": options_with_images,
+                        "explanation": q.explanation,
+                        "explanation_images": [img.dict() for img in q.explanation_images],
+                        "remarks": q.remarks,
+                        "remarks_images": [img.dict() for img in q.remarks_images],
+                        "question_images": [img.dict() for img in q.question_images],
+                        "subject": q.subject,
+                        "topic": q.topic,
+                        "tags": q.tags,
+                        "marks": getattr(q, "marks", 1.0),
+                        "created_at": q.created_at,
+                        "updated_at": q.updated_at,
+                        "is_active": q.is_active,
+                        "created_by": q.created_by,
+                    }
+                )
+
         return {
-            "message": f"Questions for section '{section_name}' retrieved successfully",
-            "course": {
-                "id": str(course.id),
-                "title": course.title,
-                "code": course.code,
-            },
+            "message": (
+                f"Random {section.question_count} questions for section '{section_name}' (mock mode)"
+                if (mode or "").lower() == "mock"
+                else f"Questions for section '{section_name}' retrieved successfully"
+            ),
+            "course": {"id": str(course.id), "title": course.title, "code": course.code},
             "section": section_name,
             "questions": question_data,
-            "pagination": {
-                "total": total_questions,
-                "page": page,
-                "limit": limit,
-                "total_pages": total_pages,
-            },
+            "pagination": (
+                {
+                    "total": total_questions,
+                    "limit": section.question_count,
+                    "page": 1,
+                    "total_pages": total_pages,
+                }
+                if (mode or "").lower() == "mock"
+                else {
+                    "total": total_questions,
+                    "page": page,
+                    "limit": limit,
+                    "total_pages": total_pages,
+                }
+            ),
         }
 
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve section questions: {str(e)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve section questions: {str(e)}")
+
+
 
 
 # Endpoint to get section details
@@ -1651,3 +1860,43 @@ async def delete_section_from_course(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete section: {str(e)}",
         )
+        
+# manpreet ne add kiya hai.
+
+def str_to_bool(value: str) -> Optional[bool]:
+    if value is None:
+        return None
+    if value.lower() in ["true", "1", "yes"]:
+        return True
+    if value.lower() in ["false", "0", "no"]:
+        return False
+    return None
+
+
+@router.get("/tests")
+async def list_tests(is_free: Optional[str] = None):
+    query = {}
+    parsed_bool = str_to_bool(is_free)
+    if parsed_bool is not None:
+        query["is_free"] = parsed_bool
+
+    tests = await Test.find(query).to_list()
+    return {"items": tests, "message": "Tests retrieved successfully"}
+
+@router.put("/{course_id}/sections/{section_name}/question-count")
+async def update_section_question_count(
+    course_id: str,
+    section_name: str,
+    new_count: int = Body(..., embed=True)
+):
+    course = await Course.get(course_id)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    section = course.get_section(section_name)
+    if not section:
+        raise HTTPException(status_code=404, detail="Section not found")
+
+    section.question_count = new_count
+    await course.save()
+    return {"message": "Question count updated", "section": section}
