@@ -17,13 +17,35 @@ from datetime import datetime
 from bson import ObjectId
 
 from ..models.course import Course, ExamSubCategory, Section
-from ..models.question import Question, QuestionType, DifficultyLevel
+from ..models.question import (
+    Question,
+    QuestionType,
+    DifficultyLevel,
+    QuestionOption,
+    ImageAttachment,
+)
 from ..models.admin_action import AdminAction, ActionType
 from ..models.user import User
 from ..models.enums import ExamCategory
 from ..dependencies import admin_required, get_current_user
 
 router = APIRouter(prefix="/api/v1/courses", tags=["Courses"])
+
+
+# Helper function to extract image URLs from text
+def extract_image_urls(text):
+    if not isinstance(text, str):
+        return text, []
+
+    # Pattern to match URLs
+    url_pattern = r"https?://\S+"
+    urls = re.findall(url_pattern, text)
+
+    # Remove URLs from text
+    clean_text = re.sub(url_pattern, "", text).strip()
+
+    return clean_text, urls
+
 
 # A course is an exam for all intents and purposes.
 
@@ -981,28 +1003,82 @@ async def upload_questions_to_section(
                     opt_text = row.get(opt_key, "").strip()
                     if opt_text:
                         option_letter = chr(65 + i)  # A, B, C, D
+                        # Extract images from option text if any
+                        option_text, option_images = extract_image_urls(opt_text)
+
+                        # Convert image URLs to ImageAttachment objects
+                        image_attachments = []
+                        for j, img_url in enumerate(option_images):
+                            image_attachments.append(
+                                ImageAttachment(
+                                    url=img_url,
+                                    alt_text=f"Option {option_letter} image {j+1}",
+                                    order=j,
+                                )
+                            )
+
                         options.append(
-                            {
-                                "text": opt_text,
-                                "is_correct": option_letter == correct_answer,
-                            }
+                            QuestionOption(
+                                text=option_text,
+                                is_correct=option_letter == correct_answer,
+                                images=image_attachments,
+                                order=i,
+                            )
                         )
 
                 # Get question text and create title
                 question_text = row.get("question", "").strip()
-                title = question_text[:50] + ("..." if len(question_text) > 50 else "")
+                question_text_clean, question_images = extract_image_urls(question_text)
+                title = question_text_clean[:50] + (
+                    "..." if len(question_text_clean) > 50 else ""
+                )
+
+                # Extract explanation and remarks with images
+                explanation = row.get("explanation", "").strip() or None
+                explanation_clean, explanation_images = extract_image_urls(
+                    explanation or ""
+                )
+                remarks_clean, remarks_images = extract_image_urls(remarks)
+
+                # Convert image URLs to ImageAttachment objects
+                question_image_attachments = []
+                for i, img_url in enumerate(question_images):
+                    question_image_attachments.append(
+                        ImageAttachment(
+                            url=img_url, alt_text=f"Question image {i+1}", order=i
+                        )
+                    )
+
+                explanation_image_attachments = []
+                for i, img_url in enumerate(explanation_images):
+                    explanation_image_attachments.append(
+                        ImageAttachment(
+                            url=img_url, alt_text=f"Explanation image {i+1}", order=i
+                        )
+                    )
+
+                remarks_image_attachments = []
+                for i, img_url in enumerate(remarks_images):
+                    remarks_image_attachments.append(
+                        ImageAttachment(
+                            url=img_url, alt_text=f"Remarks image {i+1}", order=i
+                        )
+                    )
 
                 # Map CSV row to Question model
                 question = Question(
                     title=title,
-                    question_text=question_text,
+                    question_text=question_text_clean,
                     question_type=QuestionType.MCQ,
                     difficulty_level=DifficultyLevel.MEDIUM,  # Default difficulty
                     course_id=course_id,
                     section=section,
                     options=options,
-                    explanation=row.get("explanation", "").strip() or None,
-                    remarks=remarks,
+                    explanation=explanation_clean or None,
+                    explanation_images=explanation_image_attachments,
+                    remarks=remarks_clean or None,
+                    remarks_images=remarks_image_attachments,
+                    question_images=question_image_attachments,
                     subject=row.get("subject", "General").strip(),
                     topic=row.get("topic", "General").strip(),
                     tags=[],
@@ -1118,20 +1194,46 @@ async def get_section_questions(
         # Format questions for response
         question_data = []
         for q in questions:
+            # Convert options to include images
+            options_with_images = []
+            for option in q.options:
+                option_dict = {
+                    "text": option.text,
+                    "is_correct": option.is_correct,
+                    "images": [img.dict() for img in option.images],
+                    "order": option.order,
+                }
+                options_with_images.append(option_dict)
+
             question_data.append(
                 {
                     "id": str(q.id),
                     "title": q.title,
                     "question_text": q.question_text,
-                    "question_type": q.question_type,
-                    "difficulty_level": q.difficulty_level,
-                    "options": q.options,
+                    "question_type": (
+                        q.question_type.value
+                        if hasattr(q.question_type, "value")
+                        else str(q.question_type)
+                    ),
+                    "difficulty_level": (
+                        q.difficulty_level.value
+                        if hasattr(q.difficulty_level, "value")
+                        else str(q.difficulty_level)
+                    ),
+                    "options": options_with_images,
                     "explanation": q.explanation,
+                    "explanation_images": [img.dict() for img in q.explanation_images],
+                    "remarks": q.remarks,
+                    "remarks_images": [img.dict() for img in q.remarks_images],
+                    "question_images": [img.dict() for img in q.question_images],
                     "subject": q.subject,
                     "topic": q.topic,
                     "tags": q.tags,
                     "marks": getattr(q, "marks", 1.0),
                     "created_at": q.created_at,
+                    "updated_at": q.updated_at,
+                    "is_active": q.is_active,
+                    "created_by": q.created_by,
                 }
             )
 
