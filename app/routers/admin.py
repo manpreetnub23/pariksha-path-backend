@@ -18,7 +18,13 @@ from fastapi import (
 from pydantic import BaseModel, EmailStr
 
 from ..models.test import TestSeries, TestDifficulty
-from ..models.question import Question, QuestionType, DifficultyLevel
+from ..models.question import (
+    Question,
+    QuestionType,
+    DifficultyLevel,
+    QuestionOption,
+    ImageAttachment,
+)
 from ..models.admin_action import AdminAction, ActionType
 from ..models.user import User
 from ..models.enums import UserRole, ExamCategory
@@ -67,9 +73,20 @@ class PasswordResetRequest(BaseModel):
 
 
 # Request/Response Models for Questions
+class ImageAttachmentRequest(BaseModel):
+    url: str
+    alt_text: Optional[str] = None
+    caption: Optional[str] = None
+    order: int = 0
+    file_size: Optional[int] = None
+    dimensions: Optional[Dict[str, int]] = None
+
+
 class OptionModel(BaseModel):
     text: str
     is_correct: bool
+    images: List[ImageAttachmentRequest] = []
+    order: int = 0
 
 
 class QuestionCreateRequest(BaseModel):
@@ -81,6 +98,10 @@ class QuestionCreateRequest(BaseModel):
     exam_year: Optional[int] = None
     options: List[OptionModel]
     explanation: Optional[str] = None
+    explanation_images: List[ImageAttachmentRequest] = []
+    remarks: Optional[str] = None
+    remarks_images: List[ImageAttachmentRequest] = []
+    question_images: List[ImageAttachmentRequest] = []
     subject: str
     topic: str
     tags: List[str] = []
@@ -128,6 +149,10 @@ class QuestionUpdateRequest(BaseModel):
     exam_year: Optional[int] = None
     options: Optional[List[OptionModel]] = None
     explanation: Optional[str] = None
+    explanation_images: Optional[List[ImageAttachmentRequest]] = None
+    remarks: Optional[str] = None
+    remarks_images: Optional[List[ImageAttachmentRequest]] = None
+    question_images: Optional[List[ImageAttachmentRequest]] = None
     subject: Optional[str] = None
     topic: Optional[str] = None
     tags: Optional[List[str]] = None
@@ -143,6 +168,10 @@ class QuestionResponse(BaseModel):
     exam_year: Optional[int]
     options: List[Dict[str, Any]]
     explanation: Optional[str]
+    explanation_images: List[Dict[str, Any]]
+    remarks: Optional[str]
+    remarks_images: List[Dict[str, Any]]
+    question_images: List[Dict[str, Any]]
     subject: str
     topic: str
     tags: List[str]
@@ -827,30 +856,66 @@ async def import_questions_from_csv(
                 # Extract image URLs from question text
                 question_text, question_images = extract_image_urls(row["Question"])
 
+                # Convert question images to ImageAttachment objects
+                question_image_attachments = []
+                for i, img_url in enumerate(question_images):
+                    question_image_attachments.append(
+                        ImageAttachment(
+                            url=img_url, alt_text=f"Question image {i+1}", order=i
+                        )
+                    )
+
                 # Process options and extract image URLs
                 options = []
-                for opt in ["A", "B", "C", "D"]:
+                for i, opt in enumerate(["A", "B", "C", "D"]):
                     option_text, option_images = extract_image_urls(
                         row[f"Option {opt}"]
                     )
                     is_correct = str(row["Correct Answer"]).strip().upper() == opt
 
-                option_data = {
-                    "text": option_text,
-                    "is_correct": is_correct,
-                }
+                    # Convert option images to ImageAttachment objects
+                    option_image_attachments = []
+                    for j, img_url in enumerate(option_images):
+                        option_image_attachments.append(
+                            ImageAttachment(
+                                url=img_url,
+                                alt_text=f"Option {opt} image {j+1}",
+                                order=j,
+                            )
+                        )
 
-                # Add image URLs if present
-                if option_images:
-                    option_data["image_urls"] = option_images
-
-                options.append(option_data)
+                    options.append(
+                        QuestionOption(
+                            text=option_text,
+                            is_correct=is_correct,
+                            images=option_image_attachments,
+                            order=i,
+                        )
+                    )
 
                 # Extract explanation and remarks with any image URLs
                 explanation, explanation_images = extract_image_urls(
                     row.get("Explanation", "")
                 )
                 remarks, remarks_images = extract_image_urls(row.get("Remarks", ""))
+
+                # Convert explanation images to ImageAttachment objects
+                explanation_image_attachments = []
+                for i, img_url in enumerate(explanation_images):
+                    explanation_image_attachments.append(
+                        ImageAttachment(
+                            url=img_url, alt_text=f"Explanation image {i+1}", order=i
+                        )
+                    )
+
+                # Convert remarks images to ImageAttachment objects
+                remarks_image_attachments = []
+                for i, img_url in enumerate(remarks_images):
+                    remarks_image_attachments.append(
+                        ImageAttachment(
+                            url=img_url, alt_text=f"Remarks image {i+1}", order=i
+                        )
+                    )
 
                 # Create question object
                 question = Question(
@@ -862,29 +927,16 @@ async def import_questions_from_csv(
                     exam_type=exam_subcategory,
                     options=options,
                     explanation=explanation,
+                    explanation_images=explanation_image_attachments,
+                    remarks=remarks,
+                    remarks_images=remarks_image_attachments,
+                    question_images=question_image_attachments,
                     subject=subject,
                     topic=topic or "General",
                     created_by=str(current_user.id),
                     tags=[exam_category_enum.value, exam_subcategory, subject],
                     is_active=True,
                 )
-
-                # Add image URLs to question metadata
-                question_metadata = {}
-                if question_images:
-                    question_metadata["question_images"] = question_images
-                if explanation_images:
-                    question_metadata["explanation_images"] = explanation_images
-                if remarks_images:
-                    question_metadata["remarks_images"] = remarks_images
-                if remarks:
-                    question_metadata["remarks"] = remarks
-
-                # Store metadata if any
-                # if question_metadata:
-                # You might need to add a metadata field to your Question model
-                # This is just a suggestion for where to store additional info
-                # question.metadata = question_metadata
 
                 # Insert question into database
                 await question.insert()
@@ -1056,17 +1108,45 @@ async def update_question(
             if value is not None:
                 # Special handling for options to ensure correct format
                 if field == "options" and isinstance(value, list):
-                    # Validate options format
-                    for option in value:
+                    # Convert to QuestionOption objects
+                    question_options = []
+                    for i, option_data in enumerate(value):
                         if (
-                            not isinstance(option, dict)
-                            or "text" not in option
-                            or "is_correct" not in option
+                            not isinstance(option_data, dict)
+                            or "text" not in option_data
+                            or "is_correct" not in option_data
                         ):
                             raise HTTPException(
                                 status_code=status.HTTP_400_BAD_REQUEST,
                                 detail="Invalid options format. Each option must have 'text' and 'is_correct' fields",
                             )
+
+                        # Convert image attachments
+                        images = []
+                        for img_data in option_data.get("images", []):
+                            images.append(ImageAttachment(**img_data))
+
+                        question_options.append(
+                            QuestionOption(
+                                text=option_data["text"],
+                                is_correct=option_data["is_correct"],
+                                images=images,
+                                order=option_data.get("order", i),
+                            )
+                        )
+                    value = question_options
+
+                # Special handling for image fields
+                elif field in [
+                    "question_images",
+                    "explanation_images",
+                    "remarks_images",
+                ] and isinstance(value, list):
+                    # Convert to ImageAttachment objects
+                    image_attachments = []
+                    for img_data in value:
+                        image_attachments.append(ImageAttachment(**img_data))
+                    value = image_attachments
 
                 # Handle field mapping for enum fields
                 if field == "question_type" and isinstance(value, str):
@@ -1161,6 +1241,17 @@ async def get_question(
                 detail="Question not found",
             )
 
+        # Convert options to dict format
+        options_dict = []
+        for option in question.options:
+            option_dict = {
+                "text": option.text,
+                "is_correct": option.is_correct,
+                "images": [img.dict() for img in option.images],
+                "order": option.order,
+            }
+            options_dict.append(option_dict)
+
         # Convert to response format
         question_response = QuestionResponse(
             id=str(question.id),
@@ -1169,8 +1260,12 @@ async def get_question(
             question_type=question.question_type.value,
             difficulty_level=question.difficulty_level.value,
             exam_year=question.exam_year,
-            options=question.options,
+            options=options_dict,
             explanation=question.explanation,
+            explanation_images=[img.dict() for img in question.explanation_images],
+            remarks=question.remarks,
+            remarks_images=[img.dict() for img in question.remarks_images],
+            question_images=[img.dict() for img in question.question_images],
             subject=question.subject,
             topic=question.topic,
             tags=question.tags,

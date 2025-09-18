@@ -22,6 +22,14 @@ class Settings(BaseSettings):
         True  # Require OTP verification during login (set to True in production)
     )
 
+    # DigitalOcean Spaces configuration
+    DO_SPACES_ENDPOINT: str
+    DO_SPACES_KEY: str
+    DO_SPACES_SECRET: str
+    DO_SPACES_BUCKET: str
+    DO_SPACES_REGION: str = "nyc3"  # Change to your region
+    DO_SPACES_CDN_ENDPOINT: str  # Optional: CDN endpoint for faster access
+
     class Config:
         env_file = ".env"
 
