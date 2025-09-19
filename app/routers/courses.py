@@ -1128,149 +1128,7 @@ async def upload_questions_to_section(
         )
 
 
-# Endpoint to get questions for a specific course section
-# @router.get(
-#     "/{course_id}/sections/{section_name}/questions",
-#     response_model=Dict[str, Any],
-#     summary="Get questions for course section",
-#     description="Get all questions for a specific section in a course",
-# )
-
-
-# async def get_section_questions(
-#     course_id: str,
-#     section_name: str,
-#     page: int = Query(1, description="Page number", ge=1),
-#     limit: int = Query(10, description="Items per page", ge=1, le=100),
-#     difficulty: Optional[str] = Query(None, description="Filter by difficulty"),
-#     topic: Optional[str] = Query(None, description="Filter by topic"),
-#     current_user: Optional[User] = Depends(get_current_user),
-# ):
-#     """Get questions for a specific section in a course"""
-#     try:
-#         # Validate course_id
-#         if not ObjectId.is_valid(course_id):
-#             raise HTTPException(
-#                 status_code=status.HTTP_400_BAD_REQUEST,
-#                 detail="Invalid course ID format",
-#             )
-
-#         # Get the course
-#         course = await Course.get(course_id)
-#         if not course:
-#             raise HTTPException(
-#                 status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
-#             )
-
-#         # Check if section exists in course
-#         section_names = course.get_section_names()
-#         if not section_names or section_name not in section_names:
-#             raise HTTPException(
-#                 status_code=status.HTTP_404_NOT_FOUND,
-#                 detail=f"Section '{section_name}' not found in course",
-#             )
-
-#         # Build query filters
-#         query_filters = {
-#             "course_id": course_id,
-#             "section": section_name,
-#         }
-
-#         if difficulty:
-#             query_filters["difficulty_level"] = difficulty.upper()
-
-#         if topic:
-#             query_filters["topic"] = {"$regex": topic, "$options": "i"}
-
-#         # Calculate pagination
-#         skip = (page - 1) * limit
-
-#         # Fetch questions
-#         questions = (
-#             await Question.find(query_filters)
-#             .sort([("created_at", -1)])
-#             .skip(skip)
-#             .limit(limit)
-#             .to_list()
-#         )
-
-#         # Count total questions for pagination
-#         total_questions = await Question.find(query_filters).count()
-#         total_pages = (total_questions + limit - 1) // limit
-
-#         # Format questions for response
-#         question_data = []
-#         for q in questions:
-#             # Convert options to include images
-#             options_with_images = []
-#             for option in q.options:
-#                 option_dict = {
-#                     "text": option.text,
-#                     "is_correct": option.is_correct,
-#                     "images": [img.dict() for img in option.images],
-#                     "order": option.order,
-#                 }
-#                 options_with_images.append(option_dict)
-
-#             question_data.append(
-#                 {
-#                     "id": str(q.id),
-#                     "title": q.title,
-#                     "question_text": q.question_text,
-#                     "question_type": (
-#                         q.question_type.value
-#                         if hasattr(q.question_type, "value")
-#                         else str(q.question_type)
-#                     ),
-#                     "difficulty_level": (
-#                         q.difficulty_level.value
-#                         if hasattr(q.difficulty_level, "value")
-#                         else str(q.difficulty_level)
-#                     ),
-#                     "options": options_with_images,
-#                     "explanation": q.explanation,
-#                     "explanation_images": [img.dict() for img in q.explanation_images],
-#                     "remarks": q.remarks,
-#                     "remarks_images": [img.dict() for img in q.remarks_images],
-#                     "question_images": [img.dict() for img in q.question_images],
-#                     "subject": q.subject,
-#                     "topic": q.topic,
-#                     "tags": q.tags,
-#                     "marks": getattr(q, "marks", 1.0),
-#                     "created_at": q.created_at,
-#                     "updated_at": q.updated_at,
-#                     "is_active": q.is_active,
-#                     "created_by": q.created_by,
-#                 }
-#             )
-
-#         return {
-#             "message": f"Questions for section '{section_name}' retrieved successfully",
-#             "course": {
-#                 "id": str(course.id),
-#                 "title": course.title,
-#                 "code": course.code,
-#             },
-#             "section": section_name,
-#             "questions": question_data,
-#             "pagination": {
-#                 "total": total_questions,
-#                 "page": page,
-#                 "limit": limit,
-#                 "total_pages": total_pages,
-#             },
-#         }
-
-#     except HTTPException as e:
-#         raise e
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Failed to retrieve section questions: {str(e)}",
-#         )
-
-
-# added by manpreet 
+# added by manpreet
 @router.get(
     "/{course_id}/sections/{section_name}/questions",
     response_model=Dict[str, Any],
@@ -1315,13 +1173,23 @@ async def get_section_questions(
             if question_limit <= 0:
                 return {
                     "message": f"No questions configured for section '{section_name}'",
-                    "course": {"id": str(course.id), "title": course.title, "code": course.code},
+                    "course": {
+                        "id": str(course.id),
+                        "title": course.title,
+                        "code": course.code,
+                    },
                     "section": section_name,
                     "questions": [],
-                    "pagination": {"total": 0, "limit": question_limit, "page": 1, "total_pages": 0},
+                    "pagination": {
+                        "total": 0,
+                        "limit": question_limit,
+                        "page": 1,
+                        "total_pages": 0,
+                    },
                 }
 
             from motor.motor_asyncio import AsyncIOMotorClient
+
             _client = AsyncIOMotorClient(settings.MONGO_URI)
             db = _client.get_default_database()
             collection = db["questions"]
@@ -1419,11 +1287,17 @@ async def get_section_questions(
                         "id": str(q.id),
                         "title": q.title,
                         "question_text": q.question_text,
-                        "question_type": getattr(q.question_type, "value", str(q.question_type)),
-                        "difficulty_level": getattr(q.difficulty_level, "value", str(q.difficulty_level)),
+                        "question_type": getattr(
+                            q.question_type, "value", str(q.question_type)
+                        ),
+                        "difficulty_level": getattr(
+                            q.difficulty_level, "value", str(q.difficulty_level)
+                        ),
                         "options": options_with_images,
                         "explanation": q.explanation,
-                        "explanation_images": [img.dict() for img in q.explanation_images],
+                        "explanation_images": [
+                            img.dict() for img in q.explanation_images
+                        ],
                         "remarks": q.remarks,
                         "remarks_images": [img.dict() for img in q.remarks_images],
                         "question_images": [img.dict() for img in q.question_images],
@@ -1444,7 +1318,11 @@ async def get_section_questions(
                 if (mode or "").lower() == "mock"
                 else f"Questions for section '{section_name}' retrieved successfully"
             ),
-            "course": {"id": str(course.id), "title": course.title, "code": course.code},
+            "course": {
+                "id": str(course.id),
+                "title": course.title,
+                "code": course.code,
+            },
             "section": section_name,
             "questions": question_data,
             "pagination": (
@@ -1467,9 +1345,9 @@ async def get_section_questions(
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve section questions: {str(e)}")
-
-
+        raise HTTPException(
+            status_code=500, detail=f"Failed to retrieve section questions: {str(e)}"
+        )
 
 
 # Endpoint to get section details
@@ -1860,8 +1738,10 @@ async def delete_section_from_course(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete section: {str(e)}",
         )
-        
+
+
 # manpreet ne add kiya hai.
+
 
 def str_to_bool(value: str) -> Optional[bool]:
     if value is None:
@@ -1883,11 +1763,10 @@ async def list_tests(is_free: Optional[str] = None):
     tests = await Test.find(query).to_list()
     return {"items": tests, "message": "Tests retrieved successfully"}
 
+
 @router.put("/{course_id}/sections/{section_name}/question-count")
 async def update_section_question_count(
-    course_id: str,
-    section_name: str,
-    new_count: int = Body(..., embed=True)
+    course_id: str, section_name: str, new_count: int = Body(..., embed=True)
 ):
     course = await Course.get(course_id)
     if not course:
@@ -1900,3 +1779,221 @@ async def update_section_question_count(
     section.question_count = new_count
     await course.save()
     return {"message": "Question count updated", "section": section}
+
+
+# -------------------------------
+# Mock submission (course-based)
+# -------------------------------
+
+
+class MockSubmitAnswer(BaseModel):
+    question_id: str
+    selected_option_order: Optional[int] = None
+    selected_option_text: Optional[str] = None
+
+
+class MockSubmitRequest(BaseModel):
+    answers: List[MockSubmitAnswer]
+    time_spent_seconds: Optional[int] = 0
+    marked_for_review: Optional[List[str]] = []
+
+
+@router.post(
+    "/{course_id}/mock/submit",
+    response_model=Dict[str, Any],
+    summary="Submit course-based mock answers",
+    description=(
+        "Submit answers for a course/section-based mock test and receive scored results.\n"
+        "Accepts either selected_option_order or selected_option_text for each answer."
+    ),
+)
+async def submit_course_mock(
+    course_id: str,
+    payload: MockSubmitRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Score submitted answers for a course-based mock without persisting attempts."""
+    try:
+        # Validate course
+        if not ObjectId.is_valid(course_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid course ID format",
+            )
+
+        course = await Course.get(course_id)
+        if not course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+            )
+
+        # Collect question IDs
+        question_ids: List[str] = [
+            a.question_id for a in payload.answers if a.question_id
+        ]
+        if not question_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="No answers provided"
+            )
+
+        # Convert string IDs to ObjectId for MongoDB query
+        try:
+            object_ids = [ObjectId(qid) for qid in question_ids]
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid question ID format",
+            )
+
+        # Fetch questions in bulk
+        questions = await Question.find({"_id": {"$in": object_ids}}).to_list()
+
+        # Debug logging
+        print(
+            f"DEBUG: Found {len(questions)} questions out of {len(question_ids)} requested"
+        )
+        print(f"DEBUG: Question IDs requested: {question_ids}")
+        print(f"DEBUG: Question IDs found: {[str(q.id) for q in questions]}")
+
+        # Index answers and questions
+        answer_by_qid: Dict[str, MockSubmitAnswer] = {
+            a.question_id: a for a in payload.answers
+        }
+        question_by_id: Dict[str, Question] = {}
+        for q in questions:
+            # Beanie id may be ObjectId; cast to str
+            question_by_id[str(q.id)] = q
+
+        # Scoring
+        total_questions = len(questions)
+        attempted = 0
+        correct = 0
+        per_section: Dict[str, Dict[str, int]] = {}
+        question_results: List[Dict[str, Any]] = []
+
+        for qid, q in question_by_id.items():
+            ans = answer_by_qid.get(qid)
+            if not ans:
+                # unanswered
+                section_name = getattr(q, "section", "General") or "General"
+                per_section.setdefault(
+                    section_name, {"total": 0, "attempted": 0, "correct": 0}
+                )
+                per_section[section_name]["total"] += 1
+                question_results.append(
+                    {
+                        "question_id": qid,
+                        "section": section_name,
+                        "attempted": False,
+                        "is_correct": False,
+                        "selected_option_order": None,
+                        "correct_option_order": next(
+                            (o.order for o in q.options if o.is_correct), None
+                        ),
+                    }
+                )
+                continue
+
+            section_name = getattr(q, "section", "General") or "General"
+            per_section.setdefault(
+                section_name, {"total": 0, "attempted": 0, "correct": 0}
+            )
+            per_section[section_name]["total"] += 1
+
+            # Determine selected order
+            selected_order = ans.selected_option_order
+            if selected_order is None and ans.selected_option_text is not None:
+                # Try to map by text (trim/normalize spaces)
+                normalized = ans.selected_option_text.strip()
+                for opt in q.options:
+                    if (opt.text or "").strip() == normalized:
+                        selected_order = opt.order
+                        break
+
+            if selected_order is None:
+                # treated as unanswered
+                question_results.append(
+                    {
+                        "question_id": qid,
+                        "section": section_name,
+                        "attempted": False,
+                        "is_correct": False,
+                        "selected_option_order": None,
+                        "correct_option_order": next(
+                            (o.order for o in q.options if o.is_correct), None
+                        ),
+                    }
+                )
+                continue
+
+            attempted += 1
+            per_section[section_name]["attempted"] += 1
+
+            correct_order = next((o.order for o in q.options if o.is_correct), None)
+            is_correct = correct_order is not None and selected_order == correct_order
+            if is_correct:
+                correct += 1
+                per_section[section_name]["correct"] += 1
+
+            question_results.append(
+                {
+                    "question_id": qid,
+                    "section": section_name,
+                    "attempted": True,
+                    "is_correct": is_correct,
+                    "selected_option_order": selected_order,
+                    "correct_option_order": correct_order,
+                }
+            )
+
+        max_score = total_questions  # 1 mark per question for mock
+        score = correct
+        accuracy = (correct / attempted) if attempted > 0 else 0.0
+
+        section_summaries = [
+            {
+                "section": name,
+                "total": data["total"],
+                "attempted": data["attempted"],
+                "correct": data["correct"],
+                "accuracy": (
+                    (data["correct"] / data["attempted"])
+                    if data["attempted"] > 0
+                    else 0.0
+                ),
+            }
+            for name, data in per_section.items()
+        ]
+
+        return {
+            "message": "Mock submission scored successfully",
+            "results": {
+                "course": {
+                    "id": str(course.id),
+                    "title": course.title,
+                    "code": course.code,
+                },
+                "user_id": str(current_user.id),
+                "time_spent_seconds": payload.time_spent_seconds or 0,
+                "total_questions": total_questions,
+                "attempted_questions": attempted,
+                "correct_answers": correct,
+                "score": score,
+                "max_score": max_score,
+                "percentage": (
+                    round((score / max_score) * 100, 2) if max_score > 0 else 0
+                ),
+                "accuracy": round(accuracy, 4),
+                "section_summaries": section_summaries,
+                "question_results": question_results,
+                "marked_for_review": payload.marked_for_review or [],
+            },
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to submit mock answers: {str(e)}",
+        )
