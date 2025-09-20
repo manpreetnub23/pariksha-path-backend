@@ -261,3 +261,36 @@ async def get_file_info(file_path: str, current_user: User = Depends(admin_requi
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get file info: {str(e)}",
         )
+        
+        
+        
+@router.get(
+    "/courses/{slug}/sections/{section}/materials",
+    response_model=dict,
+)
+async def list_section_materials(slug: str, section: str, current_user: User = Depends(admin_required)):
+    try:
+        # folder_path = f"pdfs/{slug}/{section}/"  # future me use karenge
+        folder_path = "pariksha-path-bucket/pdfs/2025/09/19/"    
+        files = await storage_service.list_files(prefix=folder_path)
+        print("DEBUG prefix used in router:", folder_path)
+        return {"materials": files}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list materials: {str(e)}"
+        )
+
+@router.get("/debug-keys")
+async def debug_keys():
+    try:
+        resp = storage_service.s3_client.list_objects_v2(
+            Bucket=storage_service.bucket_name,
+            Prefix=""   # saare objects dikhayega
+        )
+        return resp
+    except Exception as e:
+        return {
+            "error": str(e),
+            "type": str(type(e))
+        }

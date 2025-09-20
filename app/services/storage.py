@@ -24,6 +24,10 @@ class StorageService:
             aws_secret_access_key=settings.DO_SPACES_SECRET,
             region_name=settings.DO_SPACES_REGION,
         )
+        print("DO_SPACES_ENDPOINT =", settings.DO_SPACES_ENDPOINT)
+        print("DO_SPACES_CDN_ENDPOINT =", settings.DO_SPACES_CDN_ENDPOINT)
+        print("DO_SPACES_BUCKET =", settings.DO_SPACES_BUCKET)
+
         self.bucket_name = settings.DO_SPACES_BUCKET
         self.cdn_endpoint = (
             settings.DO_SPACES_CDN_ENDPOINT or settings.DO_SPACES_ENDPOINT
@@ -42,11 +46,14 @@ class StorageService:
         else:
             return f"{file_type}/{timestamp}/{unique_id}"
 
+    # def _get_public_url(self, file_path: str) -> str:
+    #     """Get the public URL for a file"""
+    #     if self.cdn_endpoint:
+    #         return f"{self.cdn_endpoint}/{self.bucket_name}/{file_path}"
+    #     return f"{settings.DO_SPACES_ENDPOINT}/{self.bucket_name}/{file_path}"
     def _get_public_url(self, file_path: str) -> str:
-        """Get the public URL for a file"""
-        if self.cdn_endpoint:
-            return f"{self.cdn_endpoint}/{self.bucket_name}/{file_path}"
-        return f"{settings.DO_SPACES_ENDPOINT}/{self.bucket_name}/{file_path}"
+        return f"{self.cdn_endpoint}/{file_path}"
+
 
     async def upload_file(
         self,
@@ -93,6 +100,8 @@ class StorageService:
                 ContentType=content_type,
                 ACL="public-read",  # Make file publicly accessible
             )
+            # inside upload handler, after upload or before put_object
+            print("UPLOAD generated file_path:", file_path)
 
             public_url = self._get_public_url(file_path)
 
@@ -234,6 +243,76 @@ class StorageService:
         except Exception as e:
             print(f"Error getting file info for {file_path}: {str(e)}")
             return None
+        
+    # async def list_files(self, prefix: str = "") -> list[dict]:
+    #     """
+    #     List all files in a given prefix (folder)
+
+    #     Args:
+    #         prefix: Folder path prefix (e.g. "pdfs/2025/09/19/")
+
+    #     Returns:
+    #         List of files with metadata
+    #     """
+    #     try:
+    #         # print(f"DEBUG: listing prefix={prefix}")
+    #         print("Bucket name:", self.bucket_name)
+    #         print("Prefix:", prefix)
+    #         response = self.s3_client.list_objects_v2(
+    #         Bucket=self.bucket_name,   # sirf bucket name
+    #         Prefix=prefix,             # yahan par bucket repeat mat karna
+    #     )
+    #         print("Raw S3 response:", response)  # 👈 yeh add kar
+    #         return response.get("Contents", [])
+    #         print(f"DEBUG: raw response={response}")
+
+    #         files = []
+    #         for obj in response.get("Contents", []):
+    #             files.append({
+    #                 "name": obj["Key"].split("/")[-1],   # sirf filename
+    #                 "path": obj["Key"],                  # pura path
+    #                 "url": self._get_public_url(obj["Key"]),  # yahan sahi URL banega
+    #                 "last_modified": obj["LastModified"].isoformat(),
+    #                 "size": obj["Size"],
+    #             })
+
+    #         return files   # yeh hona chahiye
+    #     except ClientError as e:
+    #         print(f"Error listing files with prefix {prefix}: {str(e)}")
+    #         return []
+    #     except Exception as e:
+    #         print(f"Unexpected error listing files: {str(e)}")
+    #         return []
+    
+    async def list_files(self, prefix: str = "") -> list[dict]:
+        try:
+            response = self.s3_client.list_objects_v2(
+                Bucket=self.bucket_name,
+                # 👇 prefix hata do filhaal
+                # Prefix=prefix,
+            )
+
+            print("ALL OBJECTS IN BUCKET:")
+            if "Contents" not in response:
+                print("  (empty)")
+                return []
+
+            for obj in response["Contents"]:
+                print(" -", obj["Key"])
+
+            return []
+        except Exception as e:
+            print("REAL ERROR in list_files:", type(e), e)
+            return []
+
+
+
+
+
+
+
+
+
 
 
 # Global instance
