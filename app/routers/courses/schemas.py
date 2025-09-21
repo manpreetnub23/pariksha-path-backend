@@ -1,18 +1,17 @@
-from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Depends, status, Query
-from typing import List, Optional, Dict, Any
+"""
+Course-related Pydantic schemas for request/response models
+"""
+
+from typing import List, Optional
 from pydantic import BaseModel, Field
-from ..models.exam import Exam, ExamSubCategory
-from ..models.admin_action import AdminAction, ActionType
-from ..models.user import User
-from ..models.enums import ExamCategory
-from ..dependencies import admin_required, get_current_user
+from datetime import datetime
+
+from ...models.enums import ExamCategory
 
 
-router = APIRouter(prefix="/api/v1/exams", tags=["Exams"])
+class CourseCreateRequest(BaseModel):
+    """Schema for creating a new course"""
 
-
-class ExamCreateRequest(BaseModel):
     title: str
     code: str
     category: ExamCategory
@@ -28,11 +27,12 @@ class ExamCreateRequest(BaseModel):
     priority_order: int = 0
     banner_url: Optional[str] = None
     tagline: Optional[str] = None
+    sections: List[str] = []
 
     class Config:
         json_schema_extra = {
             "example": {
-                "title": "Complete JEE Main",
+                "title": "Complete JEE Main Physics",
                 "code": "JEE-PHY-001",
                 "category": "engineering",
                 "sub_category": "JEE Main",
@@ -47,13 +47,17 @@ class ExamCreateRequest(BaseModel):
                 "priority_order": 1,
                 "banner_url": "https://example.com/banners/jee-physics-banner.jpg",
                 "tagline": "Master Physics concepts for JEE Main",
+                "sections": ["Physics", "Chemistry", "Biology"],
             }
         }
 
 
-class ExamUpdateRequest(BaseModel):
+class CourseUpdateRequest(BaseModel):
+    """Schema for updating a course"""
+
     title: Optional[str] = None
     description: Optional[str] = None
+    sections: Optional[List[str]] = None
     price: Optional[float] = None
     is_free: Optional[bool] = None
     discount_percent: Optional[float] = None
@@ -67,13 +71,16 @@ class ExamUpdateRequest(BaseModel):
     is_active: Optional[bool] = None
 
 
-class ExamResponse(BaseModel):
+class CourseResponse(BaseModel):
+    """Schema for course response"""
+
     id: str
     title: str
     code: str
     category: str
     sub_category: str
     description: str
+    sections: Optional[List[str]] = None
     price: float
     is_free: bool
     discount_percent: Optional[float] = None
@@ -87,3 +94,37 @@ class ExamResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class SectionCreateRequest(BaseModel):
+    """Schema for creating a new section"""
+
+    section_name: str
+
+
+class SectionUpdateRequest(BaseModel):
+    """Schema for updating a section"""
+
+    new_section_name: str
+
+
+class MockSubmitAnswer(BaseModel):
+    """Schema for mock test answer submission"""
+
+    question_id: str
+    selected_option_order: Optional[int] = None
+    selected_option_text: Optional[str] = None
+
+
+class MockSubmitRequest(BaseModel):
+    """Schema for mock test submission"""
+
+    answers: List[MockSubmitAnswer]
+    time_spent_seconds: Optional[int] = 0
+    marked_for_review: Optional[List[str]] = []
+
+
+class QuestionCountUpdateRequest(BaseModel):
+    """Schema for updating section question count"""
+
+    new_count: int = Field(..., embed=True)

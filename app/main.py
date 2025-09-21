@@ -16,14 +16,14 @@ from .models.study_material import StudyMaterial
 from .routers.auth import router as auth_router
 from .dependencies import get_current_user
 from .routers.admin import router as admin_router
-from .routers.courses import router as courses_router
-from .routers.exam_categories import router as exam_categories_router
+from .routers.courses import courses_router
 from .routers.tests import router as tests_router
-from .routers.materials import router as materials_router
 from .routers.analytics import router as analytics_router
-from .routers.uploads import router as uploads_router
 import asyncio
 from .dependencies import ensure_db
+
+# from .routers.exam_categories import router as exam_categories_router
+# from .routers.materials import router as materials_router
 
 
 # Security
@@ -112,11 +112,10 @@ async def db_session_middleware(request: Request, call_next):
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(courses_router)
-app.include_router(exam_categories_router)
+# app.include_router(exam_categories_router)
 app.include_router(tests_router)
-app.include_router(materials_router)
+# app.include_router(materials_router)
 app.include_router(analytics_router)
-app.include_router(uploads_router)
 
 
 # Health check endpoints
@@ -443,9 +442,5 @@ async def create_user(user_data: UserCreateRequest):
         )
 
 
-# 👇 Only run uvicorn locally
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
-
-# 👇 Vercel expects `app` object
-# app = app
