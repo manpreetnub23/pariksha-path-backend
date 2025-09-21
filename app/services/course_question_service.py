@@ -232,6 +232,7 @@ class CourseQuestionService:
                         "text": opt.get("text"),
                         "is_correct": opt.get("is_correct", False),
                         "order": opt.get("order"),
+                        "image_urls": opt.get("image_urls", []),
                     }
                     for opt in q.get("options", [])
                 ]
@@ -254,6 +255,9 @@ class CourseQuestionService:
                         "updated_at": q.get("updated_at"),
                         "is_active": q.get("is_active", True),
                         "created_by": q.get("created_by"),
+                        "question_image_urls": q.get("question_image_urls", []),
+                        "explanation_image_urls": q.get("explanation_image_urls", []),
+                        "remarks_image_urls": q.get("remarks_image_urls", []),
                     }
                 )
             else:  # NORMAL MODE
@@ -262,6 +266,7 @@ class CourseQuestionService:
                         "text": option.text,
                         "is_correct": option.is_correct,
                         "order": option.order,
+                        "image_urls": option.image_urls,
                     }
                     for option in q.options
                 ]
@@ -288,6 +293,9 @@ class CourseQuestionService:
                         "updated_at": q.updated_at,
                         "is_active": q.is_active,
                         "created_by": q.created_by,
+                        "question_image_urls": q.question_image_urls,
+                        "explanation_image_urls": q.explanation_image_urls,
+                        "remarks_image_urls": q.remarks_image_urls,
                     }
                 )
 

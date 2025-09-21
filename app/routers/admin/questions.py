@@ -47,6 +47,7 @@ async def get_question(
                 "text": option.text,
                 "is_correct": option.is_correct,
                 "order": option.order,
+                "image_urls": option.image_urls,
             }
             options_dict.append(option_dict)
 
@@ -68,6 +69,9 @@ async def get_question(
             created_by=question.created_by,
             created_at=question.created_at,
             updated_at=question.updated_at,
+            question_image_urls=question.question_image_urls,
+            explanation_image_urls=question.explanation_image_urls,
+            remarks_image_urls=question.remarks_image_urls,
         )
 
         return AdminService.format_response(
