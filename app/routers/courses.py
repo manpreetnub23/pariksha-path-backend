@@ -22,7 +22,6 @@ from ..models.question import (
     QuestionType,
     DifficultyLevel,
     QuestionOption,
-    ImageAttachment,
 )
 from ..models.admin_action import AdminAction, ActionType
 from ..models.user import User
@@ -33,21 +32,6 @@ from fastapi import Body
 from app.config import settings
 
 router = APIRouter(prefix="/api/v1/courses", tags=["Courses"])
-
-
-# Helper function to extract image URLs from text
-def extract_image_urls(text):
-    if not isinstance(text, str):
-        return text, []
-
-    # Pattern to match URLs
-    url_pattern = r"https?://\S+"
-    urls = re.findall(url_pattern, text)
-
-    # Remove URLs from text
-    clean_text = re.sub(url_pattern, "", text).strip()
-
-    return clean_text, urls
 
 
 # A course is an exam for all intents and purposes.
@@ -1007,82 +991,32 @@ async def upload_questions_to_section(
                     opt_text = row.get(opt_key, "").strip()
                     if opt_text:
                         option_letter = chr(65 + i)  # A, B, C, D
-                        # Extract images from option text if any
-                        option_text, option_images = extract_image_urls(opt_text)
-
-                        # Convert image URLs to ImageAttachment objects
-                        image_attachments = []
-                        for j, img_url in enumerate(option_images):
-                            image_attachments.append(
-                                ImageAttachment(
-                                    url=img_url,
-                                    alt_text=f"Option {option_letter} image {j+1}",
-                                    order=j,
-                                )
-                            )
-
                         options.append(
                             QuestionOption(
-                                text=option_text,
+                                text=opt_text,
                                 is_correct=option_letter == correct_answer,
-                                images=image_attachments,
                                 order=i,
                             )
                         )
 
                 # Get question text and create title
                 question_text = row.get("question", "").strip()
-                question_text_clean, question_images = extract_image_urls(question_text)
-                title = question_text_clean[:50] + (
-                    "..." if len(question_text_clean) > 50 else ""
-                )
+                title = question_text[:50] + ("..." if len(question_text) > 50 else "")
 
-                # Extract explanation and remarks with images
+                # Extract explanation and remarks
                 explanation = row.get("explanation", "").strip() or None
-                explanation_clean, explanation_images = extract_image_urls(
-                    explanation or ""
-                )
-                remarks_clean, remarks_images = extract_image_urls(remarks)
-
-                # Convert image URLs to ImageAttachment objects
-                question_image_attachments = []
-                for i, img_url in enumerate(question_images):
-                    question_image_attachments.append(
-                        ImageAttachment(
-                            url=img_url, alt_text=f"Question image {i+1}", order=i
-                        )
-                    )
-
-                explanation_image_attachments = []
-                for i, img_url in enumerate(explanation_images):
-                    explanation_image_attachments.append(
-                        ImageAttachment(
-                            url=img_url, alt_text=f"Explanation image {i+1}", order=i
-                        )
-                    )
-
-                remarks_image_attachments = []
-                for i, img_url in enumerate(remarks_images):
-                    remarks_image_attachments.append(
-                        ImageAttachment(
-                            url=img_url, alt_text=f"Remarks image {i+1}", order=i
-                        )
-                    )
 
                 # Map CSV row to Question model
                 question = Question(
                     title=title,
-                    question_text=question_text_clean,
+                    question_text=question_text,
                     question_type=QuestionType.MCQ,
                     difficulty_level=DifficultyLevel.MEDIUM,  # Default difficulty
                     course_id=course_id,
                     section=section,
                     options=options,
-                    explanation=explanation_clean or None,
-                    explanation_images=explanation_image_attachments,
-                    remarks=remarks_clean or None,
-                    remarks_images=remarks_image_attachments,
-                    question_images=question_image_attachments,
+                    explanation=explanation,
+                    remarks=remarks or None,
                     subject=row.get("subject", "General").strip(),
                     topic=row.get("topic", "General").strip(),
                     tags=[],
@@ -1242,7 +1176,6 @@ async def get_section_questions(
                     {
                         "text": opt.get("text"),
                         "is_correct": opt.get("is_correct", False),
-                        "images": opt.get("images", []),
                         "order": opt.get("order"),
                     }
                     for opt in q.get("options", [])
@@ -1257,10 +1190,7 @@ async def get_section_questions(
                         "difficulty_level": q.get("difficulty_level"),
                         "options": options_with_images,
                         "explanation": q.get("explanation"),
-                        "explanation_images": q.get("explanation_images", []),
                         "remarks": q.get("remarks"),
-                        "remarks_images": q.get("remarks_images", []),
-                        "question_images": q.get("question_images", []),
                         "subject": q.get("subject"),
                         "topic": q.get("topic"),
                         "tags": q.get("tags", []),
@@ -1276,7 +1206,6 @@ async def get_section_questions(
                     {
                         "text": option.text,
                         "is_correct": option.is_correct,
-                        "images": [img.dict() for img in option.images],
                         "order": option.order,
                     }
                     for option in q.options
@@ -1295,12 +1224,7 @@ async def get_section_questions(
                         ),
                         "options": options_with_images,
                         "explanation": q.explanation,
-                        "explanation_images": [
-                            img.dict() for img in q.explanation_images
-                        ],
                         "remarks": q.remarks,
-                        "remarks_images": [img.dict() for img in q.remarks_images],
-                        "question_images": [img.dict() for img in q.question_images],
                         "subject": q.subject,
                         "topic": q.topic,
                         "tags": q.tags,
