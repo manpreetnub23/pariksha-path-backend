@@ -23,6 +23,7 @@ class QuestionOption(BaseModel):
     text: str
     is_correct: bool
     order: int = 0
+    image_urls: List[str] = Field(default_factory=list)
 
 
 class Question(BaseDocument):
@@ -41,6 +42,11 @@ class Question(BaseDocument):
     options: List[QuestionOption] = Field(default_factory=list)
     explanation: Optional[str] = None
     remarks: Optional[str] = None
+
+    # Images
+    question_image_urls: List[str] = Field(default_factory=list)
+    explanation_image_urls: List[str] = Field(default_factory=list)
+    remarks_image_urls: List[str] = Field(default_factory=list)
 
     # Metadata
     subject: str  # e.g., "Physics", "Chemistry", "Mathematics"

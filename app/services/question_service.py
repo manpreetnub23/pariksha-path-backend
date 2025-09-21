@@ -42,6 +42,7 @@ class QuestionService:
                     text=option_data["text"],
                     is_correct=option_data["is_correct"],
                     order=i,
+                    image_urls=option_data.get("image_urls", []),
                 )
             )
 
@@ -61,6 +62,9 @@ class QuestionService:
             created_by=created_by,
             tags=question_data.get("tags", []),
             is_active=True,
+            question_image_urls=question_data.get("question_image_urls", []),
+            explanation_image_urls=question_data.get("explanation_image_urls", []),
+            remarks_image_urls=question_data.get("remarks_image_urls", []),
         )
 
         return question

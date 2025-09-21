@@ -52,6 +52,7 @@ class OptionModel(BaseModel):
     text: str
     is_correct: bool
     order: int = 0
+    image_urls: List[str] = Field(default_factory=list)
 
 
 class QuestionCreateRequest(BaseModel):
@@ -67,6 +68,9 @@ class QuestionCreateRequest(BaseModel):
     subject: str
     topic: str
     tags: List[str] = Field(default_factory=list)
+    question_image_urls: List[str] = Field(default_factory=list)
+    explanation_image_urls: List[str] = Field(default_factory=list)
+    remarks_image_urls: List[str] = Field(default_factory=list)
 
     class Config:
         json_schema_extra = {
@@ -116,6 +120,9 @@ class QuestionUpdateRequest(BaseModel):
     topic: Optional[str] = None
     tags: Optional[List[str]] = Field(default=None)
     is_active: Optional[bool] = None
+    question_image_urls: Optional[List[str]] = None
+    explanation_image_urls: Optional[List[str]] = None
+    remarks_image_urls: Optional[List[str]] = None
 
 
 class QuestionResponse(BaseModel):
@@ -135,6 +142,9 @@ class QuestionResponse(BaseModel):
     created_by: str
     created_at: datetime
     updated_at: datetime
+    question_image_urls: List[str]
+    explanation_image_urls: List[str]
+    remarks_image_urls: List[str]
 
 
 # CSV Import Schemas
