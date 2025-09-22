@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 from .enums import ExamCategory
 import re
+import uuid
 
 
 class ExamSubCategory(BaseModel):
@@ -12,6 +13,21 @@ class ExamSubCategory(BaseModel):
     name: str  # e.g., "NEET", "JEE Main"
     description: Optional[str] = None
     icon_url: Optional[str] = None
+
+
+class SectionFile(BaseModel):
+    """Represents a file uploaded to a section"""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    filename: str
+    original_filename: str
+    file_url: str
+    file_size_kb: int
+    file_type: str  # "pdf", "doc", "docx", etc.
+    uploaded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    uploaded_by: str  # Admin user ID
+    description: Optional[str] = None
+    is_active: bool = True
 
 
 class Section(BaseModel):
@@ -25,6 +41,9 @@ class Section(BaseModel):
     question_count: int = 0  # Number of questions in this section
     order: int  # For sorting sections in the UI
     is_active: bool = True
+
+    # NEW: PDF and file management
+    files: List[SectionFile] = Field(default_factory=list)
 
     @validator("name")
     def validate_name(cls, v):
@@ -113,6 +132,43 @@ class Course(Document):
         section.question_count += count
         await self.save()
         return True
+
+    async def add_file_to_section(
+        self, section_name: str, file_data: SectionFile
+    ) -> bool:
+        """Add a file to a specific section"""
+        section = self.get_section(section_name)
+        if not section:
+            return False
+        section.files.append(file_data)
+        await self.save()
+        return True
+
+    async def remove_file_from_section(self, section_name: str, file_id: str) -> bool:
+        """Remove a file from a specific section"""
+        section = self.get_section(section_name)
+        if not section:
+            return False
+        section.files = [f for f in section.files if f.id != file_id]
+        await self.save()
+        return True
+
+    def get_section_files(self, section_name: str) -> List[SectionFile]:
+        """Get all files for a specific section"""
+        section = self.get_section(section_name)
+        return section.files if section else []
+
+    def get_section_file(
+        self, section_name: str, file_id: str
+    ) -> Optional[SectionFile]:
+        """Get a specific file from a section"""
+        section = self.get_section(section_name)
+        if not section:
+            return None
+        for file in section.files:
+            if file.id == file_id:
+                return file
+        return None
 
     # Pricing
     price: float
