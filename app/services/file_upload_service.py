@@ -4,6 +4,7 @@ File upload service for DigitalOcean Spaces
 
 import boto3
 import uuid
+import re
 from typing import Optional, List
 from fastapi import UploadFile, HTTPException, status
 from PIL import Image
@@ -26,8 +27,14 @@ class FileUploadService:
         "image/webp": ".webp",
     }
 
-    # Maximum file size (5MB)
-    MAX_FILE_SIZE = 5 * 1024 * 1024
+    # Allowed PDF types
+    ALLOWED_PDF_TYPES = {
+        "application/pdf": ".pdf",
+    }
+
+    # Maximum file sizes
+    MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB for images
+    MAX_PDF_SIZE = 50 * 1024 * 1024  # 50MB for PDFs
 
     @staticmethod
     def _get_s3_client():
@@ -51,10 +58,27 @@ class FileUploadService:
             )
 
         # Check file size
-        if file.size and file.size > FileUploadService.MAX_FILE_SIZE:
+        if file.size and file.size > FileUploadService.MAX_IMAGE_SIZE:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File too large. Maximum size: {FileUploadService.MAX_FILE_SIZE // (1024*1024)}MB",
+                detail=f"File too large. Maximum size: {FileUploadService.MAX_IMAGE_SIZE // (1024*1024)}MB",
+            )
+
+    @staticmethod
+    def _validate_pdf(file: UploadFile) -> None:
+        """Validate uploaded PDF file"""
+        # Check file type
+        if file.content_type not in FileUploadService.ALLOWED_PDF_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid file type. Allowed types: {', '.join(FileUploadService.ALLOWED_PDF_TYPES.keys())}",
+            )
+
+        # Check file size
+        if file.size and file.size > FileUploadService.MAX_PDF_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File too large. Maximum size: {FileUploadService.MAX_PDF_SIZE // (1024*1024)}MB",
             )
 
     @staticmethod
@@ -99,6 +123,23 @@ class FileUploadService:
             return f"images/{question_id}_{image_type}_option_{option_index}_{timestamp}_{unique_id}{file_extension}"
         else:
             return f"images/{question_id}_{image_type}_{timestamp}_{unique_id}{file_extension}"
+
+    @staticmethod
+    def _generate_section_file_path(
+        course_id: str,
+        section_name: str,
+        filename: str,
+        file_extension: str,
+    ) -> str:
+        """Generate file path for uploaded section file"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        unique_id = str(uuid.uuid4())[:8]
+
+        # Clean filename for safe storage
+        safe_filename = re.sub(r"[^a-zA-Z0-9._-]", "_", filename)
+        safe_section = re.sub(r"[^a-zA-Z0-9._-]", "_", section_name)
+
+        return f"courses/{course_id}/sections/{safe_section}/{safe_filename}_{timestamp}_{unique_id}{file_extension}"
 
     @staticmethod
     async def upload_question_image(
@@ -211,3 +252,92 @@ class FileUploadService:
                 deleted_count += 1
 
         return deleted_count
+
+    @staticmethod
+    async def upload_section_pdf(
+        file: UploadFile,
+        course_id: str,
+        section_name: str,
+    ) -> str:
+        """
+        Upload PDF file for a course section
+
+        Args:
+            file: Uploaded PDF file
+            course_id: Course ID
+            section_name: Section name
+
+        Returns:
+            Public URL of uploaded PDF
+        """
+        try:
+            # Validate PDF
+            FileUploadService._validate_pdf(file)
+
+            # Read file content
+            file_content = await file.read()
+
+            # Generate file path
+            file_extension = FileUploadService.ALLOWED_PDF_TYPES[file.content_type]
+            file_path = FileUploadService._generate_section_file_path(
+                course_id, section_name, file.filename or "document", file_extension
+            )
+
+            # Upload to DigitalOcean Spaces
+            s3_client = FileUploadService._get_s3_client()
+            s3_client.put_object(
+                Bucket=settings.DO_SPACES_BUCKET,
+                Key=file_path,
+                Body=file_content,
+                ContentType=file.content_type,
+                ACL="public-read",
+            )
+
+            # Return public URL
+            if settings.DO_SPACES_CDN_ENDPOINT:
+                return f"{settings.DO_SPACES_CDN_ENDPOINT}/{file_path}"
+            else:
+                return f"{settings.DO_SPACES_ENDPOINT}/{settings.DO_SPACES_BUCKET}/{file_path}"
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to upload PDF: {str(e)}",
+            )
+
+    @staticmethod
+    async def delete_section_pdf(pdf_url: str) -> bool:
+        """
+        Delete PDF file from DigitalOcean Spaces
+
+        Args:
+            pdf_url: Public URL of PDF to delete
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Extract file path from URL
+            if (
+                settings.DO_SPACES_CDN_ENDPOINT
+                and settings.DO_SPACES_CDN_ENDPOINT in pdf_url
+            ):
+                file_path = pdf_url.replace(f"{settings.DO_SPACES_CDN_ENDPOINT}/", "")
+            elif settings.DO_SPACES_ENDPOINT in pdf_url:
+                file_path = pdf_url.replace(
+                    f"{settings.DO_SPACES_ENDPOINT}/{settings.DO_SPACES_BUCKET}/", ""
+                )
+            else:
+                return False
+
+            # Delete from DigitalOcean Spaces
+            s3_client = FileUploadService._get_s3_client()
+            s3_client.delete_object(Bucket=settings.DO_SPACES_BUCKET, Key=file_path)
+
+            return True
+
+        except Exception as e:
+            print(f"Failed to delete PDF {pdf_url}: {str(e)}")
+            return False
