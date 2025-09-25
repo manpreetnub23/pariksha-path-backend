@@ -19,6 +19,8 @@ from .routers.admin import router as admin_router
 from .routers.courses import courses_router
 from .routers.tests import router as tests_router
 from .routers.analytics import router as analytics_router
+from .routers.materials import router as materials_router
+from .routers.exam_content import router as content_router
 import asyncio
 from .dependencies import ensure_db
 
@@ -114,8 +116,9 @@ app.include_router(admin_router)
 app.include_router(courses_router)
 # app.include_router(exam_categories_router)
 app.include_router(tests_router)
-# app.include_router(materials_router)
+app.include_router(materials_router)
 app.include_router(analytics_router)
+app.include_router(content_router)
 
 
 # Health check endpoints
