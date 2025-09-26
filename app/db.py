@@ -15,9 +15,8 @@ from .models.test import TestSeries, TestSession, TestAttempt
 from .models.user_analytics import UserAnalytics
 from .models.admin_action import AdminAction
 from .models.course import Course
-
-# from .models.material import Material
 from .models.study_material import StudyMaterial, UserMaterialProgress
+from .models.exam_content import ExamContent
 from .models.exam_category_structure import ExamCategoryStructure
 
 # from .models.result import Result  # enable if needed
@@ -130,6 +129,7 @@ async def init_db() -> None:
                 StudyMaterial,
                 UserMaterialProgress,
                 ExamCategoryStructure,
+                ExamContent,
                 # Material,
                 # Result,
             ],
