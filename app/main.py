@@ -60,7 +60,9 @@ app = FastAPI(
 # Configure CORS
 origins = [
     "http://localhost:3000",  # Your local frontend
+    "http://localhost:5173",  # Vite dev server
     "https://pariksha-path2-0.vercel.app",  # Your production frontend
+    "*",  # Allow all origins for development (remove in production)
 ]
 
 app.add_middleware(
