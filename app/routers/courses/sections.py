@@ -34,7 +34,10 @@ async def add_section_to_course(
     """Add a new section to a course (Admin only)"""
     try:
         result = await SectionService.add_section_to_course(
-            course_id, section_data.section_name, current_user
+            course_id,
+            section_data.section_name,
+            current_user,
+            section_data.question_count,
         )
         return result
     except ValueError as e:

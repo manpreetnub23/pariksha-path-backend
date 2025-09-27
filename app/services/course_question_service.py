@@ -187,6 +187,90 @@ class CourseQuestionService:
             db = _client.get_default_database()
             collection = db["questions"]
 
+            # For debugging
+            total_available = await Question.find(
+                {"course_id": course_id, "section": section_name}
+            ).count()
+            print(
+                f"DEBUG: Found {total_available} questions matching course_id={course_id}, section={section_name}"
+            )
+
+            # Use standard Beanie approach but limit by question_limit
+            if total_available > 0:
+                # Get questions but limit to question_limit
+                # We'll sort randomly by using a projection with random value
+                import random
+
+                # Simple approach - get all questions and then take a random sample in Python
+                all_questions = await Question.find(
+                    {"course_id": course_id, "section": section_name}
+                ).to_list()
+
+                # Shuffle the questions in Python
+                random.shuffle(all_questions)
+
+                # Take only up to question_limit
+                limited_questions = all_questions[:question_limit]
+
+                # Return formatted response with question data properly formatted
+                question_data = []
+                for q in limited_questions:
+                    options_with_images = [
+                        {
+                            "text": option.text,
+                            "is_correct": option.is_correct,
+                            "order": option.order,
+                            "image_urls": option.image_urls,
+                        }
+                        for option in q.options
+                    ]
+
+                    question_data.append(
+                        {
+                            "id": str(q.id),
+                            "title": q.title,
+                            "question_text": q.question_text,
+                            "question_type": getattr(
+                                q.question_type, "value", str(q.question_type)
+                            ),
+                            "difficulty_level": getattr(
+                                q.difficulty_level, "value", str(q.difficulty_level)
+                            ),
+                            "options": options_with_images,
+                            "explanation": q.explanation,
+                            "remarks": q.remarks,
+                            "subject": q.subject,
+                            "topic": q.topic,
+                            "tags": q.tags,
+                            "marks": getattr(q, "marks", 1.0),
+                            "created_at": q.created_at,
+                            "updated_at": q.updated_at,
+                            "is_active": q.is_active,
+                            "created_by": q.created_by,
+                            "question_image_urls": q.question_image_urls,
+                            "explanation_image_urls": q.explanation_image_urls,
+                            "remarks_image_urls": q.remarks_image_urls,
+                        }
+                    )
+
+                return {
+                    "message": f"Random {section.question_count} questions for section '{section_name}' (mock mode)",
+                    "course": {
+                        "id": str(course.id),
+                        "title": course.title,
+                        "code": course.code,
+                    },
+                    "section": section_name,
+                    "questions": question_data,
+                    "pagination": {
+                        "total": len(question_data),
+                        "limit": question_limit,
+                        "page": 1,
+                        "total_pages": 1,
+                    },
+                }
+
+            # If above fails or returns no questions, try the original approach
             pipeline = [
                 {"$match": {"course_id": course_id, "section": section_name}},
                 {"$sample": {"size": question_limit}},

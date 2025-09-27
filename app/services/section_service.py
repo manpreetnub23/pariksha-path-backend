@@ -17,7 +17,7 @@ class SectionService:
 
     @staticmethod
     async def add_section_to_course(
-        course_id: str, section_name: str, current_user: User
+        course_id: str, section_name: str, current_user: User, question_count: int = 10
     ) -> Dict[str, Any]:
         """
         Add a new section to a course
@@ -26,6 +26,7 @@ class SectionService:
             course_id: Course ID
             section_name: Name of the section to add
             current_user: User adding the section
+            question_count: Number of questions to show in mock tests (default: 10)
 
         Returns:
             Dictionary with section addition result
@@ -48,7 +49,7 @@ class SectionService:
             name=section_name,
             description=f"Section: {section_name}",
             order=len(course.sections) + 1,
-            question_count=0,
+            question_count=question_count,
         )
 
         # Add section to course

@@ -100,6 +100,7 @@ class SectionCreateRequest(BaseModel):
     """Schema for creating a new section"""
 
     section_name: str
+    question_count: int = 10
 
 
 class SectionUpdateRequest(BaseModel):
