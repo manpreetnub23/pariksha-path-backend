@@ -115,6 +115,7 @@ class MockSubmitAnswer(BaseModel):
     question_id: str
     selected_option_order: Optional[int] = None
     selected_option_text: Optional[str] = None
+    selected_options: Optional[List[int]] = None
 
 
 class MockSubmitRequest(BaseModel):

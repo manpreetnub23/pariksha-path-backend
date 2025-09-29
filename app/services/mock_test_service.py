@@ -145,6 +145,14 @@ class MockTestService:
 
             # Determine selected order
             selected_order = ans.get("selected_option_order")
+
+            # Handle selected_options array format (from frontend)
+            if selected_order is None and ans.get("selected_options"):
+                selected_options = ans["selected_options"]
+                if isinstance(selected_options, list) and len(selected_options) > 0:
+                    selected_order = selected_options[0]  # Take first answer from array
+                    print(f"DEBUG: Using selected_options[0] = {selected_order} for question {qid}")
+
             if selected_order is None and ans.get("selected_option_text") is not None:
                 # Try to map by text (trim/normalize spaces)
                 normalized = ans["selected_option_text"].strip()
@@ -152,6 +160,8 @@ class MockTestService:
                     if (opt.text or "").strip() == normalized:
                         selected_order = opt.order
                         break
+
+            print(f"DEBUG: Question {qid}: selected_order={selected_order}, correct_order will be calculated")
 
             if selected_order is None:
                 # treated as unanswered
@@ -174,6 +184,9 @@ class MockTestService:
 
             correct_order = next((o.order for o in q.options if o.is_correct), None)
             is_correct = correct_order is not None and selected_order == correct_order
+
+            print(f"DEBUG: Question {qid}: selected_order={selected_order}, correct_order={correct_order}, is_correct={is_correct}")
+
             if is_correct:
                 correct += 1
                 per_section[section_name]["correct"] += 1
@@ -192,6 +205,8 @@ class MockTestService:
         max_score = total_questions  # 1 mark per question for mock
         score = correct
         accuracy = (correct / attempted) if attempted > 0 else 0.0
+
+        print(f"DEBUG: Final stats - total_questions={total_questions}, attempted={attempted}, correct={correct}, score={score}, max_score={max_score}, accuracy={accuracy}")
 
         section_summaries = [
             {
@@ -269,7 +284,7 @@ class MockTestService:
         # Save the test attempt to the database
         await test_attempt.insert()
 
-        return {
+        result = {
             "message": "Mock submission scored successfully",
             "results": {
                 "course": {
@@ -293,3 +308,7 @@ class MockTestService:
                 "attempt_id": str(test_attempt.id),
             },
         }
+
+        print(f"DEBUG: Final result - score={result['results']['score']}, percentage={result['results']['percentage']}, accuracy={result['results']['accuracy']}")
+
+        return result
