@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any, List
 
 from ...models.user import User
 from ...models.test import TestAttempt
+from ...models.question import Question
 from ...dependencies import get_current_user
 
 router = APIRouter(prefix="/api/v1/mock-history", tags=["Mock Test History"])
@@ -92,7 +93,7 @@ async def get_mock_attempt_details(
     attempt_id: str,
     current_user: User = Depends(get_current_user),
 ):
-    """Get details of a specific mock test attempt"""
+    """Get details of a specific mock test attempt with full question data"""
     try:
         # Get the test attempt
         attempt = await TestAttempt.get(attempt_id)
@@ -116,6 +117,34 @@ async def get_mock_attempt_details(
                 "code": course.code,
             }
 
+        # Get full question data for each question attempt
+        question_attempts_with_details = []
+        for qa in attempt.question_attempts:
+            question = await Question.get(qa.question_id)
+            if question:
+                question_attempts_with_details.append({
+                    **qa.dict(),
+                    "question": {
+                        "id": str(question.id),
+                        "title": question.title,
+                        "question_text": question.question_text,
+                        "options": [
+                            {
+                                "text": opt.text,
+                                "is_correct": opt.is_correct,
+                                "order": opt.order,
+                                "image_urls": opt.image_urls
+                            }
+                            for opt in question.options
+                        ],
+                        "explanation": question.explanation,
+                        "subject": question.subject,
+                        "topic": question.topic,
+                        "difficulty_level": question.difficulty_level,
+                        "question_image_urls": question.question_image_urls,
+                    }
+                })
+
         # Format response
         result = {
             "id": str(attempt.id),
@@ -135,7 +164,7 @@ async def get_mock_attempt_details(
             "section_summaries": [
                 section.dict() for section in attempt.section_summaries
             ],
-            "question_attempts": [qa.dict() for qa in attempt.question_attempts],
+            "question_attempts": question_attempts_with_details,
         }
 
         return {
