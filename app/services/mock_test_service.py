@@ -8,6 +8,8 @@ from bson import ObjectId
 from ..models.course import Course
 from ..models.question import Question
 from ..models.user import User
+from ..models.test import TestAttempt, QuestionAttempt, SectionSummary
+from datetime import datetime, timezone, timedelta
 
 
 class MockTestService:
@@ -206,6 +208,67 @@ class MockTestService:
             for name, data in per_section.items()
         ]
 
+        # Create question attempts for the TestAttempt model
+        question_attempts = []
+        for qr in question_results:
+            # Create QuestionAttempt using the correct fields according to the model
+            question_attempt = QuestionAttempt(
+                question_id=qr["question_id"],
+                # Convert to the expected format
+                selected_options=(
+                    [str(qr["selected_option_order"])]
+                    if qr["selected_option_order"] is not None
+                    else []
+                ),
+                # Map to the correct AnswerStatus enum value
+                status=(
+                    "correct"
+                    if qr["is_correct"]
+                    else "incorrect" if qr["attempted"] else "skipped"
+                ),
+                marks_awarded=1 if qr["is_correct"] else 0,
+                marks_available=1.0,  # 1 mark per question for mock
+                negative_marks=0,  # No negative marking in mock tests
+                time_spent_seconds=0,  # We don't track per-question time
+            )
+            question_attempts.append(question_attempt)
+
+        # Create section summaries for the TestAttempt model
+        section_summary_objects = []
+        for summary in section_summaries:
+            section_summary = SectionSummary(
+                section_name=summary["section"],
+                total_questions=summary["total"],
+                attempted_questions=summary["attempted"],
+                correct_answers=summary["correct"],
+                marks_obtained=summary["correct"],  # 1 mark per correct answer
+                max_marks=summary["total"],  # 1 mark per question
+                accuracy_percent=summary["accuracy"] * 100,  # Convert to percentage
+            )
+            section_summary_objects.append(section_summary)
+
+        # Create and save the TestAttempt
+        test_attempt = TestAttempt(
+            user_id=str(current_user.id),
+            test_series_id=course_id,  # Using course_id as test_series_id for mock tests
+            start_time=datetime.now(timezone.utc)
+            - timedelta(seconds=time_spent_seconds or 0),
+            end_time=datetime.now(timezone.utc),
+            question_attempts=question_attempts,
+            section_summaries=section_summary_objects,
+            total_questions=total_questions,
+            attempted_questions=attempted,
+            correct_answers=correct,
+            score=score,
+            max_score=max_score,
+            accuracy=accuracy,
+            time_spent_seconds=time_spent_seconds or 0,
+            is_completed=True,
+        )
+
+        # Save the test attempt to the database
+        await test_attempt.insert()
+
         return {
             "message": "Mock submission scored successfully",
             "results": {
@@ -227,5 +290,6 @@ class MockTestService:
                 "accuracy": round(accuracy, 4),
                 "section_summaries": section_summaries,
                 "question_results": question_results,
+                "attempt_id": str(test_attempt.id),
             },
         }

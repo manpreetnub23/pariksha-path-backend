@@ -8,7 +8,7 @@ class ActionType(str, Enum):
     CREATE = "create"
     UPDATE = "update"
     DELETE = "delete"
-
+ 
 
 class AdminAction(Document):
     admin_id: str
