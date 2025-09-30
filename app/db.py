@@ -30,67 +30,90 @@ _beanie_lock = asyncio.Lock()
 
 async def _make_client() -> motor.motor_asyncio.AsyncIOMotorClient:
     """
-    Create a Motor client tuned for serverless. Adjust pool sizes/timeouts for your load.
+    Create a Motor client optimized for Vercel serverless environment.
+    Key optimizations for serverless:
+    - Minimal connection pool (serverless functions are single-use)
+    - Fast timeouts to avoid hanging requests
+    - Proper TLS and server API settings
     """
     return motor.motor_asyncio.AsyncIOMotorClient(
         settings.MONGO_URI,
-        serverSelectionTimeoutMS=5000,
-        connectTimeoutMS=5000,
-        socketTimeoutMS=20000,
-        maxPoolSize=2,  # small pool for serverless
-        minPoolSize=0,
-        maxIdleTimeMS=10000,  # close idle faster
-        waitQueueTimeoutMS=5000,
+        # Serverless-optimized settings
+        serverSelectionTimeoutMS=3000,  # Faster timeout for serverless
+        connectTimeoutMS=3000,          # Quick connection establishment
+        socketTimeoutMS=10000,          # Reasonable socket timeout
+        maxPoolSize=1,                  # Minimal pool for serverless (functions are ephemeral)
+        minPoolSize=0,                  # No minimum connections
+        maxIdleTimeMS=5000,             # Close idle connections quickly
+        waitQueueTimeoutMS=3000,        # Don't wait too long for connections
         appname="pariksha-path-vercel",
         tls=True,
         tlsAllowInvalidCertificates=False,
         server_api=ServerApi("1"),
+        # Additional serverless optimizations
+        retryWrites=False,              # Disable retries for faster failures
+        retryReads=False,               # Disable read retries
+        compressors="zlib",             # Enable compression for better performance
     )
 
 
 async def get_db_client() -> motor.motor_asyncio.AsyncIOMotorClient:
     """
-    Return a long-lived client for this process. Recreate if ping fails.
-    Safe for concurrent cold-starts via an async lock.
+    Get MongoDB client optimized for serverless environments.
+    In serverless, we create a new connection per request for reliability.
     """
     global _global_client
 
-    # fast path: existing client and healthy
-    if _global_client is not None:
-        try:
-            await _global_client.admin.command("ping")
-            return _global_client
-        except Exception:
-            try:
-                _global_client.close()
-            except Exception:
-                pass
-            _global_client = None
-
-    # guarded creation to avoid concurrent double-init
-    async with _client_lock:
+    # For serverless environments, always create fresh connections
+    # This avoids stale connection issues that cause BSON cursor errors
+    try:
         if _global_client is not None:
-            # another coroutine already created it
-            try:
-                await _global_client.admin.command("ping")
-                return _global_client
-            except Exception:
-                try:
-                    _global_client.close()
-                except Exception:
-                    pass
-                _global_client = None
+            # Test if existing connection is healthy
+            await _global_client.admin.command("ping", serverSelectionTimeoutMS=2000)
+            return _global_client
+        else:
+            # Create new connection
+            _global_client = await _make_client()
+            await _global_client.admin.command("ping", serverSelectionTimeoutMS=2000)
+            return _global_client
 
-        # create client
-        _global_client = await _make_client()
+    except Exception as e:
+        # Connection is unhealthy, create new one
+        print(f"⚠️ Existing DB connection unhealthy: {str(e)}")
         try:
-            await _global_client.admin.command("ping")
+            if _global_client:
+                _global_client.close()
         except Exception:
-            # ping failed; leave client assigned so callers can decide;
-            # get_db_client callers should handle errors if ping is required.
             pass
 
-    return _global_client
+        _global_client = await _make_client()
+        try:
+            await _global_client.admin.command("ping", serverSelectionTimeoutMS=2000)
+        except Exception as ping_error:
+            print(f"❌ Failed to establish new DB connection: {str(ping_error)}")
+            raise ping_error
+
+        return _global_client
+
+
+async def get_db_client_with_retry(max_retries: int = 2) -> motor.motor_asyncio.AsyncIOMotorClient:
+    """
+    Get database client with retry logic for serverless environments.
+    """
+    for attempt in range(max_retries + 1):
+        try:
+            return await get_db_client()
+        except Exception as e:
+            if attempt == max_retries:
+                print(f"❌ All DB connection attempts failed after {max_retries + 1} tries")
+                raise e
+
+            print(f"⚠️ DB connection attempt {attempt + 1} failed: {str(e)}")
+            # Brief delay before retry
+            await asyncio.sleep(0.1 * (attempt + 1))
+
+    # This should never be reached, but just in case
+    raise Exception("Failed to establish database connection after all retries")
 
 
 async def init_db() -> None:

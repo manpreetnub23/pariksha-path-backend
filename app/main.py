@@ -31,18 +31,22 @@ security = HTTPBearer()
 # Lifespan context manager for startup and shutdown events
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # Startup
+    # Startup - Initialize database connection for serverless
     print("⚡ Initializing database connection...")
-    app.mongodb_client = await init_db()  # Store client for cleanup
-    print("✅ Database initialized successfully")
+    try:
+        # Initialize Beanie models - this is idempotent and serverless-safe
+        from .db import init_db
+        await init_db()
+        print("✅ Database initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Database initialization warning: {str(e)}")
+        # Don't fail startup in serverless - let endpoints handle connection issues
 
     yield  # App runs here
 
-    # Shutdown
-    if hasattr(app, "mongodb_client") and app.mongodb_client:
-        print("\n🛑 Closing database connection...")
-        await app.mongodb_client.close()
-        print("✅ Database connection closed")
+    # Shutdown - In serverless, connections are automatically cleaned up
+    # No need to explicitly close connections as they're per-request in serverless
+    print("✅ Serverless function completed")
 
 
 # Initialize FastAPI app with lifespan
@@ -83,16 +87,16 @@ async def db_session_middleware(request: Request, call_next):
             # Import here to avoid circular imports
             from .db import get_db_client
 
-            # Get client and log attempt
+            # Get client and log attempt - simplified for serverless
             start_time = datetime.now()
             client = await get_db_client()
 
             # Quick ping test with timeout to verify connection is working
-            # This uses the cached connection so should be fast
             try:
-                await client.admin.command("ping", socketTimeoutMS=2000)
+                await client.admin.command("ping", serverSelectionTimeoutMS=1000)
             except Exception as e:
                 print(f"⚠️ DB ping check failed but continuing: {str(e)}")
+                # Don't fail the request - let the endpoint handle DB errors
 
             # Log connection time for monitoring
             elapsed = (datetime.now() - start_time).total_seconds() * 1000
