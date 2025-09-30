@@ -2,6 +2,7 @@ from typing import List, Dict, Any, Callable, Optional, TypeVar, Union, Tuple
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
 import asyncio
+import hashlib
 
 T = TypeVar("T")
 
@@ -197,3 +198,10 @@ def add_filter_if_not_none(filters: Dict, field: str, value: Any) -> Dict:
     if value is not None:
         filters[field] = value
     return filters
+
+def deterministic_receipt_hex12(course_id: str, user_id: str) -> str:
+    raw = f"{course_id}:{user_id}"
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return digest[:12]  # 12 hex chars (0-9a-f)
+
+# Usage

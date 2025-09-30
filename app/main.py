@@ -21,6 +21,11 @@ from .routers.tests import router as tests_router
 from .routers.contact import router as contact_router
 from .routers.materials import router as materials_router
 from .routers.analytics import router as analytics_router
+from .routers.exam_content import router as examcontent_router
+from .routers.payment import router as payment_router
+from .routers.enrollment import router as enrollment_router
+
+
 # from .routers.exam_categories import router as exam_categories_router
 
 
@@ -123,7 +128,9 @@ app.include_router(analytics_router)
 # app.include_router(content_router)
 app.include_router(contact_router)
 app.include_router(analytics_router)
-
+app.include_router(payment_router)
+app.include_router(enrollment_router)
+app.include_router(examcontent_router)
 
 # Health check endpoints
 @app.get("/")

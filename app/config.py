@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     DO_SPACES_BUCKET: str
     DO_SPACES_REGION: str = "nyc3"  # Change to your region
     DO_SPACES_CDN_ENDPOINT: str  # Optional: CDN endpoint for faster access
+    
+    # Razorpay configuration
+     # 👇 Add Razorpay keys here
+    RAZORPAY_KEY_ID: str
+    RAZORPAY_KEY_SECRET: str
+
 
     class Config:
         env_file = ".env"
