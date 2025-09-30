@@ -18,8 +18,7 @@ from .models.course import Course
 from .models.study_material import StudyMaterial, UserMaterialProgress
 from .models.exam_content import ExamContent
 from .models.exam_category_structure import ExamCategoryStructure
-
-# from .models.result import Result  # enable if needed
+from .models.contact import Contact
 
 # Globals (one client + one beanie-init flag per process)
 _global_client: Optional[motor.motor_asyncio.AsyncIOMotorClient] = None
@@ -130,6 +129,7 @@ async def init_db() -> None:
                 UserMaterialProgress,
                 ExamCategoryStructure,
                 ExamContent,
+                Contact,
                 # Material,
                 # Result,
             ],
