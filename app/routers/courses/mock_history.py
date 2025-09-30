@@ -122,28 +122,62 @@ async def get_mock_attempt_details(
         for qa in attempt.question_attempts:
             question = await Question.get(qa.question_id)
             if question:
-                question_attempts_with_details.append({
-                    **qa.dict(),
-                    "question": {
-                        "id": str(question.id),
-                        "title": question.title,
-                        "question_text": question.question_text,
-                        "options": [
-                            {
-                                "text": opt.text,
-                                "is_correct": opt.is_correct,
-                                "order": opt.order,
-                                "image_urls": opt.image_urls
-                            }
-                            for opt in question.options
-                        ],
-                        "explanation": question.explanation,
-                        "subject": question.subject,
-                        "topic": question.topic,
-                        "difficulty_level": question.difficulty_level,
-                        "question_image_urls": question.question_image_urls,
+                # Find the correct option order
+                correct_option_order = None
+                for opt in question.options:
+                    if opt.is_correct:
+                        correct_option_order = opt.order
+                        break
+
+                # Get selected option order (handle both single and multiple selections)
+                selected_option_order = None
+                if qa.selected_options and len(qa.selected_options) > 0:
+                    # For now, take the first selected option if multiple are selected
+                    # You might need to handle this differently based on your question types
+                    selected_option_order = int(qa.selected_options[0])
+
+                # Determine if the answer is correct
+                is_correct = qa.status == "correct"
+
+                question_attempts_with_details.append(
+                    {
+                        "question_id": qa.question_id,
+                        "selected_option_order": selected_option_order,
+                        "correct_option_order": correct_option_order,
+                        "is_correct": is_correct,
+                        "status": (
+                            qa.status.value
+                            if hasattr(qa.status, "value")
+                            else str(qa.status)
+                        ),
+                        "selected_options": qa.selected_options,  # Keep original for debugging
+                        "time_spent_seconds": qa.time_spent_seconds,
+                        "marks_awarded": qa.marks_awarded,
+                        "marks_available": qa.marks_available,
+                        "negative_marks": qa.negative_marks,
+                        "question": {
+                            "id": str(question.id),
+                            "title": question.title,
+                            "question_text": question.question_text,
+                            "options": [
+                                {
+                                    "text": opt.text,
+                                    "is_correct": opt.is_correct,
+                                    "order": opt.order,
+                                    "image_urls": opt.image_urls,
+                                }
+                                for opt in sorted(
+                                    question.options, key=lambda x: x.order
+                                )
+                            ],
+                            "explanation": question.explanation,
+                            "subject": question.subject,
+                            "topic": question.topic,
+                            "difficulty_level": question.difficulty_level,
+                            "question_image_urls": question.question_image_urls,
+                        },
                     }
-                })
+                )
 
         # Format response
         result = {
