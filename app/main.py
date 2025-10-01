@@ -79,6 +79,22 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def debug_cors_middleware(request: Request, call_next):
+    # Log incoming request details
+    print(f"Incoming request: {request.method} {request.url}")
+    print(f"Origin header: {request.headers.get('origin')}")
+    print(f"Referer header: {request.headers.get('referer')}")
+
+    response = await call_next(request)
+
+    # Log outgoing response headers
+    print(f"Response status: {response.status_code}")
+    print(f"CORS headers: {response.headers.get('access-control-allow-origin')}")
+
+    return response
+
+
 # Enhanced middleware for serverless environments to ensure database connectivity
 @app.middleware("http")
 async def db_session_middleware(request: Request, call_next):
