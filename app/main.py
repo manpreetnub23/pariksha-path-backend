@@ -41,6 +41,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         # Initialize Beanie models - this is idempotent and serverless-safe
         from .db import init_db
+
         await init_db()
         print("✅ Database initialized successfully")
     except Exception as e:
@@ -130,6 +131,7 @@ app.include_router(analytics_router)
 app.include_router(payment_router)
 app.include_router(enrollment_router)
 app.include_router(examcontent_router)
+
 
 # Health check endpoints
 @app.get("/")
