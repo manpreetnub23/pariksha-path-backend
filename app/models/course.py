@@ -71,13 +71,23 @@ class Course(Document):
         if not v:
             return v
 
+        # Handle case where v might be None or contain None values
+        if v is None:
+            return []
+
+        # Filter out None values and empty strings
+        filtered_sections = [s for s in v if s is not None and str(s).strip()]
+
+        if not filtered_sections:
+            return []
+
         # If sections are strings, convert them to Section objects
-        if isinstance(v[0], str):
+        if isinstance(filtered_sections[0], str):
             section_objects = []
-            for i, section_name in enumerate(v):
+            for i, section_name in enumerate(filtered_sections):
                 section_objects.append(
                     Section(
-                        name=section_name,
+                        name=section_name.strip(),
                         description=f"Section {i + 1}: {section_name}",
                         order=i + 1,
                         question_count=0,
@@ -86,7 +96,7 @@ class Course(Document):
                 )
             return section_objects
 
-        return v
+        return filtered_sections
 
     @validator("sections")
     def validate_section_names_unique(cls, v):
