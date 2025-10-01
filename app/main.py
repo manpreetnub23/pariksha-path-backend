@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Depends, status, Query, Request
 from fastapi.security import HTTPBearer
 from datetime import datetime
 
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from .db import init_db
 import uvicorn
@@ -55,19 +56,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 # Initialize FastAPI app with lifespan
-app = FastAPI(
-    title="Pariksha Path API",
-    description="Backend API for Pariksha Path",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
 # Configure CORS
 origins = [
     "http://localhost:3000",  # Your local frontend
     "http://localhost:5173",  # Vite dev server
     "https://pariksha-path2-0.vercel.app",  # Your production frontend
 ]
+
+
+app = FastAPI(
+    title="Pariksha Path API",
+    description="Backend API for Pariksha Path",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # Enhanced middleware for serverless environments to ensure database connectivity

@@ -1,25 +1,10 @@
 {
   "version": 2,
   "builds": [
-    {
-      "src": "app/main.py",
-      "use": "@vercel/python"
-    }
+    { "src": "app/main.py", "use": "@vercel/python" }
   ],
   "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "app/main.py",
-      "headers": {
-        "Access-Control-Allow-Origin": "http://localhost:3000",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-        "Access-Control-Allow-Credentials": "true"
-      }
-    },
-    {
-      "src": "/(.*)",
-      "dest": "app/main.py"
-    }
+    { "src": "/api/(.*)", "dest": "app/main.py" },
+    { "src": "/(.*)", "dest": "app/main.py" }
   ]
 }
