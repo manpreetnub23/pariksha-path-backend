@@ -61,8 +61,9 @@ origins = [
     "http://localhost:3000",  # Your local frontend
     "http://localhost:5173",  # Vite dev server
     "https://pariksha-path2-0.vercel.app",  # Your production frontend
+    "https://pariksha-path2-0-git-main-manavk.vercel.app",  # Vercel preview URLs
+    "https://pariksha-path2-0-*.vercel.app",  # Wildcard for all Vercel preview URLs
 ]
-
 
 app = FastAPI(
     title="Pariksha Path API",
@@ -70,13 +71,31 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+
+@app.options("/{path:path}")
+async def preflight_handler(request: Request, path: str):
+    """
+    Handle preflight OPTIONS requests for CORS
+    """
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true",
+        },
+    )
 
 
 @app.middleware("http")
