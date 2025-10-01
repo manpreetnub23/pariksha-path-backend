@@ -3,7 +3,7 @@ Course-related Pydantic schemas for request/response models
 """
 
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from datetime import datetime
 
 from ...models.enums import ExamCategory
@@ -69,6 +69,23 @@ class CourseUpdateRequest(BaseModel):
     banner_url: Optional[str] = None
     tagline: Optional[str] = None
     is_active: Optional[bool] = None
+
+    @validator("sections", pre=True)
+    def validate_sections(cls, v):
+        """Ensure sections is a list of valid strings"""
+        if v is None:
+            return None
+
+        if not isinstance(v, list):
+            return None
+
+        # Filter out None values and empty strings, then validate each section
+        valid_sections = []
+        for section in v:
+            if section is not None and str(section).strip():
+                valid_sections.append(str(section).strip())
+
+        return valid_sections if valid_sections else None
 
 
 class CourseResponse(BaseModel):
