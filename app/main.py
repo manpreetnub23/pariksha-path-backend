@@ -463,6 +463,39 @@ class UserUpdateRequest(BaseModel):
     has_premium_access: Optional[bool] = None
 
 
+# In main.py
+
+@app.get("/api/v1/db-status")
+async def db_status_check():
+    """Check database and Beanie initialization status"""
+    try:
+        from .db import _beanie_initialized, get_db_client
+        
+        # Check if Beanie is initialized
+        beanie_status = "initialized" if _beanie_initialized else "not initialized"
+        
+        # Check database connection
+        start_time = datetime.now()
+        client = await get_db_client()
+        ping_time = (datetime.now() - start_time).total_seconds() * 1000
+        
+        # Test with a ping command
+        await client.admin.command("ping")
+        
+        return {
+            "status": "healthy",
+            "beanie": beanie_status,
+            "ping_ms": round(ping_time, 2),
+            "server_time": datetime.now().isoformat(),
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "server_time": datetime.now().isoformat(),
+        }
+
 @app.post("/api/v1/dev/create_user")
 async def create_user(user_data: UserCreateRequest):
     try:
