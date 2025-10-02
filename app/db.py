@@ -82,7 +82,7 @@ async def get_db_client() -> motor.motor_asyncio.AsyncIOMotorClient:
             await _global_client.admin.command("ping", serverSelectionTimeoutMS=1000)
             return _global_client
         except Exception as e:
-            print(f"⚠️ Existing DB connection unhealthy: {str(e)}")
+            print(f"⚠ Existing DB connection unhealthy: {str(e)}")
             # Don't close here, just create a new one
 
     # Create new connection
@@ -186,7 +186,7 @@ async def get_db_client_with_retry(
                 )
                 raise e
 
-            print(f"⚠️ DB connection attempt {attempt + 1} failed: {str(e)}")
+            print(f"⚠ DB connection attempt {attempt + 1} failed: {str(e)}")
             # Brief delay before retry
             await asyncio.sleep(0.1 * (attempt + 1))
 
