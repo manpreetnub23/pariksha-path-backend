@@ -33,10 +33,7 @@ _init_in_progress = False  # Prevent race conditions
 _last_init_time = 0  # Track when we last initialized
 
 # Environment variable to track if we're in a serverless environment
-_is_serverless = (
-    os.environ.get("VERCEL") == "1"
-    or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
-)
+_is_serverless = os.environ.get("VERCEL") == "1" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
 
 
 async def _make_client() -> motor.motor_asyncio.AsyncIOMotorClient:
@@ -50,16 +47,16 @@ async def _make_client() -> motor.motor_asyncio.AsyncIOMotorClient:
         connectTimeoutMS=3000,
         socketTimeoutMS=10000,
         maxPoolSize=5 if _is_serverless else 10,  # Slightly larger pool for serverless
-        minPoolSize=1 if _is_serverless else 0,  # Keep at least one connection alive
-        maxIdleTimeMS=30000,  # Keep connections alive longer
+        minPoolSize=1 if _is_serverless else 0,   # Keep at least one connection alive
+        maxIdleTimeMS=30000,            # Keep connections alive longer
         waitQueueTimeoutMS=3000,
         appname="pariksha-path-vercel",
         tls=True,
         tlsAllowInvalidCertificates=False,
         server_api=ServerApi("1"),
         # Additional serverless optimizations
-        retryWrites=True,  # Enable retries for reliability
-        retryReads=True,  # Enable read retries
+        retryWrites=True,               # Enable retries for reliability
+        retryReads=True,                # Enable read retries
         compressors="zlib",
     )
 
@@ -101,30 +98,30 @@ async def init_beanie_if_needed() -> None:
     Initialize Beanie only if needed, with proper locking.
     This is the key function that prevents repeated initializations.
     """
-    global _beanie_initialized, _init_in_progress, _last_init_time
-
+    global _beanie_initialized, _init_in_progress, _last_init_time, _db_name
+    
     # Fast path - already initialized
     if _beanie_initialized:
         return
-
+    
     # Prevent multiple initializations
     if _init_in_progress:
         # Wait for initialization to complete
         while _init_in_progress:
             await asyncio.sleep(0.1)
         return
-
+    
     async with _beanie_lock:
         # Double-check after acquiring lock
         if _beanie_initialized:
             return
-
+        
         _init_in_progress = True
         try:
             start_time = time.time()
             client = await get_db_client()
-
-            # Use cached database name
+            
+            # Get database name - ensure it's available
             if _db_name is None:
                 parsed = urlparse(settings.MONGO_URI)
                 _db_name = parsed.path.lstrip("/") or "pariksha_path_db"
@@ -170,9 +167,7 @@ async def init_db() -> None:
     await init_beanie_if_needed()
 
 
-async def get_db_client_with_retry(
-    max_retries: int = 2,
-) -> motor.motor_asyncio.AsyncIOMotorClient:
+async def get_db_client_with_retry(max_retries: int = 2) -> motor.motor_asyncio.AsyncIOMotorClient:
     """
     Get database client with retry logic for serverless environments.
     """
@@ -181,9 +176,7 @@ async def get_db_client_with_retry(
             return await get_db_client()
         except Exception as e:
             if attempt == max_retries:
-                print(
-                    f"❌ All DB connection attempts failed after {max_retries + 1} tries"
-                )
+                print(f"❌ All DB connection attempts failed after {max_retries + 1} tries")
                 raise e
 
             print(f"⚠️ DB connection attempt {attempt + 1} failed: {str(e)}")
