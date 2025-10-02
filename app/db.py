@@ -4,6 +4,8 @@ from urllib.parse import urlparse
 from typing import Optional
 import os
 import time
+import os
+import time
 
 import motor.motor_asyncio
 from pymongo.server_api import ServerApi
@@ -37,6 +39,15 @@ _is_serverless = (
     os.environ.get("VERCEL") == "1"
     or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
 )
+_db_name = None  # Cache the database name
+_init_in_progress = False  # Prevent race conditions
+_last_init_time = 0  # Track when we last initialized
+
+# Environment variable to track if we're in a serverless environment
+_is_serverless = (
+    os.environ.get("VERCEL") == "1"
+    or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
+)
 
 
 async def _make_client() -> motor.motor_asyncio.AsyncIOMotorClient:
@@ -53,11 +64,21 @@ async def _make_client() -> motor.motor_asyncio.AsyncIOMotorClient:
         minPoolSize=1 if _is_serverless else 0,  # Keep at least one connection alive
         maxIdleTimeMS=30000,  # Keep connections alive longer
         waitQueueTimeoutMS=3000,
+        serverSelectionTimeoutMS=3000,
+        connectTimeoutMS=3000,
+        socketTimeoutMS=10000,
+        maxPoolSize=5 if _is_serverless else 10,  # Slightly larger pool for serverless
+        minPoolSize=1 if _is_serverless else 0,  # Keep at least one connection alive
+        maxIdleTimeMS=30000,  # Keep connections alive longer
+        waitQueueTimeoutMS=3000,
         appname="pariksha-path-vercel",
         tls=True,
         tlsAllowInvalidCertificates=False,
         server_api=ServerApi("1"),
         # Additional serverless optimizations
+        retryWrites=True,  # Enable retries for reliability
+        retryReads=True,  # Enable read retries
+        compressors="zlib",
         retryWrites=True,  # Enable retries for reliability
         retryReads=True,  # Enable read retries
         compressors="zlib",
@@ -90,7 +111,22 @@ async def get_db_client() -> motor.motor_asyncio.AsyncIOMotorClient:
         _global_client = await _make_client()
         await _global_client.admin.command("ping", serverSelectionTimeoutMS=2000)
         print("✅ New DB connection established")
+        await _global_client.admin.command("ping", serverSelectionTimeoutMS=2000)
+        print("✅ New DB connection established")
         return _global_client
+    except Exception as e:
+        print(f"❌ Failed to establish DB connection: {str(e)}")
+        raise
+
+
+async def init_beanie_if_needed() -> None:
+    """
+    Initialize Beanie only if needed, with proper locking.
+    This is the key function that prevents repeated initializations.
+    """
+    global _beanie_initialized, _init_in_progress, _last_init_time
+
+    # Fast path - already initialized
     except Exception as e:
         print(f"❌ Failed to establish DB connection: {str(e)}")
         raise
@@ -114,7 +150,15 @@ async def init_beanie_if_needed() -> None:
             await asyncio.sleep(0.1)
         return
 
+    # Prevent multiple initializations
+    if _init_in_progress:
+        # Wait for initialization to complete
+        while _init_in_progress:
+            await asyncio.sleep(0.1)
+        return
+
     async with _beanie_lock:
+        # Double-check after acquiring lock
         # Double-check after acquiring lock
         if _beanie_initialized:
             return
