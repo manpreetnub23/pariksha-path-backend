@@ -133,7 +133,9 @@ async def init_db() -> None:
 
         # derive DB name from URI or fallback
         parsed = urlparse(settings.MONGO_URI)
+        print(parsed)
         db_name = parsed.path.lstrip("/") or "pariksha_path_db"
+        print(db_name)
         db = client.get_database(db_name)
 
         # register models with Beanie
