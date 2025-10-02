@@ -1,6 +1,6 @@
 from typing import List, Optional, AsyncIterator
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends, status, Query, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Query, Request, Response
 from fastapi.security import HTTPBearer
 from datetime import datetime
 
@@ -24,10 +24,6 @@ from .routers.analytics import router as analytics_router
 from .routers.exam_content import router as examcontent_router
 from .routers.payment import router as payment_router
 from .routers.enrollment import router as enrollment_router
-
-
-# from .routers.exam_categories import router as exam_categories_router
-
 
 # Security
 security = HTTPBearer()
@@ -166,6 +162,7 @@ app.include_router(analytics_router)
 app.include_router(payment_router)
 app.include_router(enrollment_router)
 app.include_router(examcontent_router)
+# Removed duplicate mock_history_router inclusion - it's already included in courses_router
 
 
 # Health check endpoints
