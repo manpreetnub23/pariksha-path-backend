@@ -3,11 +3,10 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from .models.user import User
 from .models.enums import UserRole
 from .auth import AuthService
-from .db import init_db
+from .db import init_beanie_if_needed  # Changed from init_db to init_beanie_if_needed
 
 # Security setup
 security = HTTPBearer()
-
 
 
 async def ensure_db():
@@ -15,16 +14,17 @@ async def ensure_db():
     FastAPI dependency: call on routes/routers requiring DB.
     First call triggers init_beanie once; subsequent calls are cheap.
     """
-    await init_db()
+    await init_beanie_if_needed()  # Use the new function that prevents repeated initializations
+
 
 # Dependency to get current user
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
+    _: None = Depends(ensure_db),  # Ensure DB is initialized before auth
 ) -> User:
     """Get current user from JWT token"""
     print(credentials)
     return await AuthService.get_current_user(credentials.credentials)
-
 
 
 # Admin-only middleware

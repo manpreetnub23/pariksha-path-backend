@@ -14,6 +14,7 @@ import os
 # import secrets
 from .services.otp_service import OTPService
 from .services.email_service import EmailService
+from .db import init_beanie_if_needed  # Import the new function
 
 import re
 
@@ -181,6 +182,9 @@ class AuthService:
     async def authenticate_user(email: str, password: str) -> Optional[User]:
         """Authenticate user with email and password"""
         try:
+            # Ensure database is initialized before authentication
+            await init_beanie_if_needed()
+
             print(f"Attempting to authenticate user: {email}")
             user = await User.find_one({"email": email})
             print(f"Database query completed, user found: {user is not None}")
@@ -226,6 +230,9 @@ class AuthService:
     @staticmethod
     async def generate_and_send_otp(email: str) -> bool:
         """Generate OTP and send verification email"""
+        # Ensure database is initialized
+        await init_beanie_if_needed()
+
         user = await User.find_one({"email": email})
         if not user:
             return False
@@ -245,6 +252,9 @@ class AuthService:
     @staticmethod
     async def verify_email_otp(email: str, otp: str) -> bool:
         """Verify email OTP"""
+        # Ensure database is initialized
+        await init_beanie_if_needed()
+
         user = await User.find_one({"email": email})
         if not user:
             return False
@@ -266,6 +276,9 @@ class AuthService:
     @staticmethod
     async def get_current_user(token: str) -> User:
         """Get current user from JWT token"""
+        # Ensure database is initialized
+        await init_beanie_if_needed()
+
         token_data = await AuthService.verify_token(token)
         user = await User.find_one({"email": token_data.email})
 
@@ -286,6 +299,9 @@ class AuthService:
     @staticmethod
     async def register_user(user_data: UserRegisterRequest) -> User:
         """Register a new user"""
+        # Ensure database is initialized
+        await init_beanie_if_needed()
+
         # Check if user already exists
         existing_user = await User.find_one({"email": user_data.email})
         if existing_user:
@@ -337,6 +353,9 @@ class AuthService:
     @staticmethod
     async def login_user(login_data: UserLoginRequest) -> tuple[User, Token]:
         """Login user and return tokens"""
+        # Ensure database is initialized
+        await init_beanie_if_needed()
+
         user = await AuthService.authenticate_user(
             login_data.email, login_data.password
         )

@@ -1,12 +1,13 @@
 from typing import List, Optional, AsyncIterator
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends, status, Query, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Query, Request, Response
 from fastapi.security import HTTPBearer
 from datetime import datetime
+import time
 
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from .db import init_db
+from .db import init_beanie_if_needed
 import uvicorn
 from .models.user import User
 from .models.enums import UserRole, ExamCategory
@@ -32,6 +33,10 @@ from .routers.enrollment import router as enrollment_router
 # Security
 security = HTTPBearer()
 
+# Global cache for initialization status
+_db_init_time = 0
+DB_INIT_CACHE_DURATION = 300  # 5 minutes
+
 
 # Lifespan context manager for startup and shutdown events
 @asynccontextmanager
@@ -40,9 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     print("⚡ Initializing database connection...")
     try:
         # Initialize Beanie models - this is idempotent and serverless-safe
-        from .db import init_db
-
-        await init_db()
+        await init_beanie_if_needed()
         print("✅ Database initialized successfully")
     except Exception as e:
         print(f"⚠️ Database initialization warning: {str(e)}")
@@ -123,29 +126,36 @@ async def db_session_middleware(request: Request, call_next):
 
     # For API routes that need database access, ensure connection is ready
     if request.url.path.startswith(("/api/")):
-        try:
-            # Import here to avoid circular imports
-            from .db import get_db_client
+        global _db_init_time
+        current_time = time.time()
 
-            # Get client and log attempt - simplified for serverless
-            start_time = datetime.now()
-            client = await get_db_client()
-
-            # Quick ping test with timeout to verify connection is working
+        # Check if we need to reinitialize (cache expired)
+        if current_time - _db_init_time > DB_INIT_CACHE_DURATION:
             try:
-                await client.admin.command("ping", serverSelectionTimeoutMS=1000)
+                # Import here to avoid circular imports
+                from .db import init_beanie_if_needed, get_db_client
+
+                start_time = datetime.now()
+                await init_beanie_if_needed()
+
+                # Get client and log attempt
+                client = await get_db_client()
+
+                # Quick ping test with timeout to verify connection is working
+                try:
+                    await client.admin.command("ping", serverSelectionTimeoutMS=1000)
+                except Exception as e:
+                    print(f"⚠️ DB ping check failed but continuing: {str(e)}")
+
+                # Log connection time for monitoring
+                elapsed = (datetime.now() - start_time).total_seconds() * 1000
+                print(f"✓ DB connection ready in {elapsed:.2f}ms")
+
+                _db_init_time = current_time
             except Exception as e:
-                print(f"⚠️ DB ping check failed but continuing: {str(e)}")
-                # Don't fail the request - let the endpoint handle DB errors
-
-            # Log connection time for monitoring
-            elapsed = (datetime.now() - start_time).total_seconds() * 1000
-            print(f"✓ DB connection ready in {elapsed:.2f}ms")
-
-        except Exception as e:
-            # Log error but don't fail the request yet
-            # Let the actual endpoint handle DB errors appropriately
-            print(f"❌ DB connection middleware error: {str(e)}")
+                # Log error but don't fail the request yet
+                # Let the actual endpoint handle DB errors appropriately
+                print(f"❌ DB connection middleware error: {str(e)}")
 
     # Continue with the request
     response = await call_next(request)
@@ -184,7 +194,7 @@ async def db_health_check():
     """Check MongoDB connection health - useful for diagnosing connection issues"""
     try:
         # Import here to avoid circular imports
-        from .db import get_db_client
+        from .db import get_db_client, _beanie_initialized
 
         # Get client and measure connection time
         start_time = datetime.now()
@@ -202,6 +212,7 @@ async def db_health_check():
 
         return {
             "status": "connected",
+            "beanie_initialized": _beanie_initialized,
             "timing": {
                 "client_init_ms": round(client_time, 2),
                 "ping_ms": round(ping_time, 2),
@@ -221,6 +232,20 @@ async def db_health_check():
             "error_type": type(e).__name__,
             "server_time": datetime.now().isoformat(),
         }
+
+
+@app.get("/api/v1/warm-up")
+async def warm_up():
+    """Warm up database connection"""
+    try:
+        from .db import init_beanie_if_needed, get_db_client
+
+        await init_beanie_if_needed()
+        client = await get_db_client()
+        await client.admin.command("ping")
+        return {"status": "warmed up"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # API Routes Groups
@@ -245,6 +270,10 @@ async def get_courses(
 ):
     """Get all available courses with filtering and pagination"""
     try:
+        # Ensure database is initialized
+        from .db import init_beanie_if_needed
+
+        await init_beanie_if_needed()
 
         query_filters = {"is_active": True}
 
@@ -339,6 +368,11 @@ async def admin_dashboard(current_user: User = Depends(get_current_user)):
         )
 
     try:
+        # Ensure database is initialized
+        from .db import init_beanie_if_needed
+
+        await init_beanie_if_needed()
+
         total_users = await User.find({"role": UserRole.STUDENT}).count()
         active_users = await User.find(
             {"role": UserRole.STUDENT, "is_active": True}
@@ -463,42 +497,14 @@ class UserUpdateRequest(BaseModel):
     has_premium_access: Optional[bool] = None
 
 
-# In main.py
-
-@app.get("/api/v1/db-status")
-async def db_status_check():
-    """Check database and Beanie initialization status"""
-    try:
-        from .db import _beanie_initialized, get_db_client
-        
-        # Check if Beanie is initialized
-        beanie_status = "initialized" if _beanie_initialized else "not initialized"
-        
-        # Check database connection
-        start_time = datetime.now()
-        client = await get_db_client()
-        ping_time = (datetime.now() - start_time).total_seconds() * 1000
-        
-        # Test with a ping command
-        await client.admin.command("ping")
-        
-        return {
-            "status": "healthy",
-            "beanie": beanie_status,
-            "ping_ms": round(ping_time, 2),
-            "server_time": datetime.now().isoformat(),
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "error_type": type(e).__name__,
-            "server_time": datetime.now().isoformat(),
-        }
-
 @app.post("/api/v1/dev/create_user")
 async def create_user(user_data: UserCreateRequest):
     try:
+        # Ensure database is initialized
+        from .db import init_beanie_if_needed
+
+        await init_beanie_if_needed()
+
         existing_user = await User.find_one({"email": user_data.email})
         if existing_user:
             raise HTTPException(
