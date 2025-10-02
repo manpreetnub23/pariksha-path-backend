@@ -8,7 +8,7 @@ from bson import ObjectId
 
 from ...models.user import User
 from ...models.course import Course, SectionFile
-from ...dependencies import admin_required
+from ...dependencies import admin_required, get_current_user
 from ...services.file_upload_service import FileUploadService
 from ...services.admin_service import AdminService
 from ...models.admin_action import ActionType
@@ -133,7 +133,7 @@ async def upload_section_pdf(
 async def get_section_files(
     course_id: str,
     section_name: str,
-    current_user: User = Depends(admin_required),
+    current_user: User = Depends(get_current_user),
 ):
     """Get all files for a specific section"""
     try:
