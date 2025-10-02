@@ -14,10 +14,11 @@ from ..auth import (
 from ..models.user import User
 from ..services.email_service import EmailService
 from ..services.otp_service import OTPService
+from ..dependencies import get_current_user, security, ensure_db
 from typing import Dict, Any
 from datetime import datetime, timezone
 from ..auth import ACCESS_TOKEN_EXPIRE_MINUTES
-from ..dependencies import get_current_user, security
+from ..db import init_beanie_if_needed  # Import the initialization function
 
 import logging
 
@@ -46,6 +47,11 @@ async def register(user_data: UserRegisterRequest):
     Returns user information and success message.
     """
     try:
+        # CRITICAL: Ensure database is initialized BEFORE any database operation
+        print("🔄 Register endpoint: Initializing database...")
+        await init_beanie_if_needed()
+        print("✅ Register endpoint: Database initialization completed")
+
         new_user = await AuthService.register_user(user_data)
         user_response = AuthService.convert_user_to_response(new_user)
 
@@ -99,6 +105,11 @@ async def login(login_data: UserLoginRequest):
     Otherwise, returns access token, refresh token, and user information directly.
     """
     try:
+        # CRITICAL: Ensure database is initialized BEFORE authentication
+        print("🔄 Login endpoint: Initializing database...")
+        await init_beanie_if_needed()
+        print("✅ Login endpoint: Database initialization completed")
+
         from ..config import settings
 
         user = await AuthService.authenticate_user(
@@ -223,6 +234,11 @@ async def refresh_access_token(
     from ..auth import SECRET_KEY, ALGORITHM
 
     try:
+        # CRITICAL: Ensure database is initialized BEFORE any database operation
+        print("🔄 Refresh token endpoint: Initializing database...")
+        await init_beanie_if_needed()
+        print("✅ Refresh token endpoint: Database initialization completed")
+
         # Verify refresh token
         payload = jwt.decode(
             credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM]
@@ -334,6 +350,11 @@ async def verify_login(
     Returns access token, refresh token, and user information.
     """
     try:
+        # CRITICAL: Ensure database is initialized BEFORE any database operation
+        print("🔄 Verify login endpoint: Initializing database...")
+        await init_beanie_if_needed()
+        print("✅ Verify login endpoint: Database initialization completed")
+
         email = request_data.get("email")
         otp = request_data.get("otp")
 
@@ -466,6 +487,11 @@ async def verify_registration_email(
         Success message and user data on successful verification
     """
     try:
+        # CRITICAL: Ensure database is initialized BEFORE any database operation
+        print("🔄 Verify registration endpoint: Initializing database...")
+        await init_beanie_if_needed()
+        print("✅ Verify registration endpoint: Database initialization completed")
+
         email = request_data.get("email")
         otp = request_data.get("otp")
 
@@ -531,6 +557,11 @@ async def resend_verification_email(request_data: dict):
     Resend OTP to user's email for verification.
     """
     try:
+        # CRITICAL: Ensure database is initialized BEFORE any database operation
+        print("🔄 Resend verification endpoint: Initializing database...")
+        await init_beanie_if_needed()
+        print("✅ Resend verification endpoint: Database initialization completed")
+
         email = request_data.get("email")
         if not email:
             raise HTTPException(
@@ -712,6 +743,11 @@ async def forgot_password(request_data: PasswordResetRequest):
     - **email**: Email address of the account to reset password for
     """
     try:
+        # CRITICAL: Ensure database is initialized BEFORE any database operation
+        print("🔄 Forgot password endpoint: Initializing database...")
+        await init_beanie_if_needed()
+        print("✅ Forgot password endpoint: Database initialization completed")
+
         # Check if user exists but don't reveal this information in the response
         user = await User.find_one({"email": request_data.email})
 
@@ -758,6 +794,11 @@ async def reset_password_with_otp(reset_data: ResetPasswordWithOTPRequest):
     - **new_password**: New password to set
     """
     try:
+        # CRITICAL: Ensure database is initialized BEFORE any database operation
+        print("🔄 Reset password endpoint: Initializing database...")
+        await init_beanie_if_needed()
+        print("✅ Reset password endpoint: Database initialization completed")
+
         # Find user by email
         user = await User.find_one({"email": reset_data.email})
         if not user:
