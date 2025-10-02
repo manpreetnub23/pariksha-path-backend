@@ -1,10 +1,10 @@
 from typing import List, Optional, AsyncIterator
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, status, Query, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from datetime import datetime
 
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from .db import init_db
 import uvicorn
@@ -41,6 +41,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         # Initialize Beanie models - this is idempotent and serverless-safe
         from .db import init_db
+
         await init_db()
         print("✅ Database initialized successfully")
     except Exception as e:
@@ -55,6 +56,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 # Initialize FastAPI app with lifespan
+# Configure CORS
+origins = [
+    "http://localhost:3000",  # Your local frontend
+    "http://localhost:5173",  # Vite dev server
+    "https://pariksha-path2-0.vercel.app",  # Your production frontend
+    "https://pariksha-path2-0-git-main-manavk.vercel.app",  # Vercel preview URLs
+    "https://pariksha-path2-0-*.vercel.app",  # Wildcard for all Vercel preview URLs
+]
+
 app = FastAPI(
     title="Pariksha Path API",
     description="Backend API for Pariksha Path",
@@ -62,21 +72,46 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS
-origins = [
-    "http://localhost:3000",  # Your local frontend
-    "http://localhost:5173",  # Vite dev server
-    "https://pariksha-path2-0.vercel.app",  # Your production frontend
-    "*",  # Allow all origins for development (remove in production)
-]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+
+@app.options("/{path:path}")
+async def preflight_handler(request: Request, path: str):
+    """
+    Handle preflight OPTIONS requests for CORS
+    """
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true",
+        },
+    )
+
+
+@app.middleware("http")
+async def debug_cors_middleware(request: Request, call_next):
+    # Log incoming request details
+    print(f"Incoming request: {request.method} {request.url}")
+    print(f"Origin header: {request.headers.get('origin')}")
+    print(f"Referer header: {request.headers.get('referer')}")
+
+    response = await call_next(request)
+
+    # Log outgoing response headers
+    print(f"Response status: {response.status_code}")
+    print(f"CORS headers: {response.headers.get('access-control-allow-origin')}")
+
+    return response
 
 
 # Enhanced middleware for serverless environments to ensure database connectivity
@@ -131,6 +166,7 @@ app.include_router(analytics_router)
 app.include_router(payment_router)
 app.include_router(enrollment_router)
 app.include_router(examcontent_router)
+
 
 # Health check endpoints
 @app.get("/")
