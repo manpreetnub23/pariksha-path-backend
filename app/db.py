@@ -8,7 +8,6 @@ import time
 import motor.motor_asyncio
 from pymongo.server_api import ServerApi
 from beanie import init_beanie
-from pymongo.errors import PyMongoError
 
 from .config import settings
 from .models.user import User
