@@ -22,7 +22,7 @@ router = APIRouter(prefix="/students", tags=["Admin - Students"])
 
 
 @router.get(
-    "/",
+    "",
     response_model=Dict[str, Any],
     summary="List all students",
     description="Admin endpoint to list all students with filters and pagination",
