@@ -10,10 +10,13 @@ from ...models.test import TestAttempt
 from ...models.question import Question
 from ...dependencies import get_current_user
 
-router = APIRouter(prefix="/api/v1/mock-history", tags=["Mock Test History"])
+router = APIRouter(
+    prefix="/api/v1/mock-history", tags=["Mock Test History"], redirect_slashes=True
+)
 
 
 @router.get("/")
+@router.get("")  # Also handle requests without trailing slash
 async def get_mock_history(
     current_user: User = Depends(get_current_user),
     limit: int = Query(10, description="Number of results to return", ge=1, le=100),
@@ -89,6 +92,7 @@ async def get_mock_history(
 
 
 @router.get("/{attempt_id}")
+@router.get("/{attempt_id}/")  # Also handle requests with trailing slash
 async def get_mock_attempt_details(
     attempt_id: str,
     current_user: User = Depends(get_current_user),
