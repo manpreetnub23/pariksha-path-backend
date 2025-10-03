@@ -83,14 +83,30 @@ async def preflight_handler(request: Request, path: str):
     """
     Handle preflight OPTIONS requests for CORS
     """
+    origin = request.headers.get("origin")
+    # Only allow origins that are in our configured list
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://pariksha-path2-0.vercel.app",
+    ]
+
+    # Check if origin is in allowed list, otherwise default to None
+    cors_origin = origin if origin in allowed_origins else None
+
+    headers = {
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Credentials": "true",
+    }
+
+    # Only set origin if it's in our allowed list
+    if cors_origin:
+        headers["Access-Control-Allow-Origin"] = cors_origin
+
     return Response(
         status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Credentials": "true",
-        },
+        headers=headers,
     )
 
 
