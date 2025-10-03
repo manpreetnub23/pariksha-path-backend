@@ -152,18 +152,13 @@ async def db_session_middleware(request: Request, call_next):
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(courses_router)
-# app.include_router(exam_categories_router)
 app.include_router(tests_router)
 app.include_router(materials_router)
 app.include_router(analytics_router)
-# app.include_router(content_router)
 app.include_router(contact_router)
-app.include_router(analytics_router)
 app.include_router(payment_router)
 app.include_router(enrollment_router)
 app.include_router(examcontent_router)
-# Removed duplicate mock_history_router inclusion - it's already included in courses_router
-
 
 # Health check endpoints
 @app.get("/")
@@ -493,33 +488,33 @@ async def db_status_check():
             "server_time": datetime.now().isoformat(),
         }
 
-# @app.post("/api/v1/dev/create_user")
-# async def create_user(user_data: UserCreateRequest):
-#     try:
-#         existing_user = await User.find_one({"email": user_data.email})
-#         if existing_user:
-#             raise HTTPException(
-#                 status_code=status.HTTP_400_BAD_REQUEST,
-#                 detail="User with this email already exists",
-#             )
-#         new_user = User(**user_data.model_dump())
-#         await new_user.insert()
-#         return {
-#             "message": "User created successfully",
-#             "user_id": str(new_user.id),
-#             "user": {
-#                 "id": str(new_user.id),
-#                 "name": new_user.name,
-#                 "email": new_user.email,
-#                 "role": new_user.role,
-#                 "created_at": new_user.created_at,
-#             },
-#         }
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Error creating user: {str(e)}",
-#         )
+@app.post("/api/v1/dev/create_user")
+async def create_user(user_data: UserCreateRequest):
+    try:
+        existing_user = await User.find_one({"email": user_data.email})
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User with this email already exists",
+            )
+        new_user = User(**user_data.model_dump())
+        await new_user.insert()
+        return {
+            "message": "User created successfully",
+            "user_id": str(new_user.id),
+            "user": {
+                "id": str(new_user.id),
+                "name": new_user.name,
+                "email": new_user.email,
+                "role": new_user.role,
+                "created_at": new_user.created_at,
+            },
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating user: {str(e)}",
+        )
 
 
 if __name__ == "__main__":
