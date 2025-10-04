@@ -1,17 +1,15 @@
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import resend
 from ..config import settings
 
 
 class EmailService:
     @staticmethod
     async def send_email(to_email: str, subject: str, body: str) -> bool:
-        """Send email using SMTP"""
+        """Send email using Resend SDK"""
         try:
-            # Check if credentials are available
-            if not settings.SENDER_EMAIL or not settings.SENDER_PASSWORD:
-                print("Warning: Email credentials not configured")
+            # Check if API key is available
+            if not settings.SENDER_PASSWORD:
+                print("Warning: Resend API key not configured")
                 # Fall back to console output for development/testing
                 print(f"\n--- Email to: {to_email} ---")
                 print(f"Subject: {subject}")
@@ -19,32 +17,33 @@ class EmailService:
                 print("--- End of email ---\n")
                 return True  # Return true in development to allow flow to continue
 
-            # Create message
-            msg = MIMEMultipart()
-            msg["From"] = settings.SENDER_EMAIL
-            msg["To"] = to_email
-            msg["Subject"] = subject
-            msg.attach(MIMEText(body, "plain"))
+            # Set API key (do this once per request)
+            resend.api_key = settings.SENDER_PASSWORD
 
-            # Send email based on port
-            # Port 465 uses SSL, Port 587 uses STARTTLS
-            if settings.SMTP_PORT == 465:
-                server = smtplib.SMTP_SSL(settings.SMTP_SERVER, settings.SMTP_PORT)
+            # Prepare email parameters
+            params = {
+                "from": settings.SENDER_EMAIL or "Pariksha Path <onboarding@resend.dev>",
+                "to": [to_email],
+                "subject": subject,
+                "html": body,  # Use HTML for better formatting
+            }
+
+            # Send email using Resend SDK
+            result = resend.Emails.send(params)
+
+            if result and result.get("id"):
+                print(f"Email sent successfully to {to_email} via Resend (ID: {result['id']})")
+                return True
             else:
-                server = smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT)
-                server.starttls()  # Enable secure connection
+                print(f"Failed to send email - no ID returned: {result}")
+                return False
 
-            # Remove any spaces from password (Gmail app passwords sometimes have spaces)
-            password = settings.SENDER_PASSWORD.replace(" ", "")
-
-            server.login(settings.SENDER_EMAIL, password)
-            server.send_message(msg)
-            server.quit()
-
-            print(f"Email sent successfully to {to_email}")
-            return True
         except Exception as e:
-            print(f"Email sending failed: {e}")
+            if "API key is invalid" in str(e):
+                print(f"Resend API key is invalid: {e}")
+                print("Please check your Resend API key in the .env file")
+            else:
+                print(f"Resend API error: {e}")
             # Fall back to console output for development
             print(f"\n--- Email to: {to_email} ---")
             print(f"Subject: {subject}")

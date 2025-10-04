@@ -11,11 +11,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     REFRESH_TOKEN_EXPIRE_DAYS: int
 
-    # Email configuration
-    SMTP_SERVER: str = "smtp.gmail.com"
-    SMTP_PORT: int = 465  # SSL port (alternative: 587 for STARTTLS)
-    SENDER_EMAIL: str | None = None
-    SENDER_PASSWORD: str | None = None  # App password should not have spaces
+    # Email configuration - Updated for Resend
+    SMTP_SERVER: str = "smtp.resend.com"
+    SMTP_PORT: int = 587  # Use 587 for STARTTLS (Resend recommended)
+    SENDER_EMAIL: str | None = None  # This will be your verified domain email
+    SENDER_PASSWORD: str | None = None  # This will be your Resend API key
 
     # Security settings
     LOGIN_OTP_REQUIRED: bool = (
