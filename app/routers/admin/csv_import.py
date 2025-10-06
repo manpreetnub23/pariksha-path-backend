@@ -51,6 +51,7 @@ async def import_questions_from_csv(
     - Correct Answer (A, B, C, or D)
     - Explanation (optional)
     - Remarks (optional)
+    - marks (required, marks value for each question)
 
     Images can be included as URLs in any field.
     """
@@ -94,6 +95,7 @@ async def import_questions_from_csv(
             "Option C",
             "Option D",
             "Correct Answer",
+            "marks",
         ]
 
         for col in required_columns:

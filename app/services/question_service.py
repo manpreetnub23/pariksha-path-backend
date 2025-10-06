@@ -57,6 +57,7 @@ class QuestionService:
             options=options,
             explanation=question_data.get("explanation"),
             remarks=question_data.get("remarks"),
+            marks=question_data.get("marks"),
             subject=question_data["subject"],
             topic=question_data.get("topic", "General"),
             created_by=created_by,
@@ -99,6 +100,17 @@ class QuestionService:
 
         for idx, row in df.iterrows():
             try:
+                # Extract marks from CSV row (required field)
+                if "marks" not in row or pd.isna(row["marks"]):
+                    raise ValueError("marks column is required for each question")
+
+                try:
+                    question_marks = float(row["marks"])
+                    if question_marks <= 0:
+                        raise ValueError("marks must be a positive number")
+                except (ValueError, TypeError):
+                    raise ValueError(f"Invalid marks value: {row.get('marks', 'N/A')}")
+
                 # Process options
                 options = []
                 for i, opt in enumerate(["A", "B", "C", "D"]):
@@ -126,6 +138,7 @@ class QuestionService:
                     remarks=str(row.get("Remarks", "")).strip() or None,
                     subject=subject,
                     topic=topic or "General",
+                    marks=question_marks,
                     created_by=created_by,
                     tags=[exam_category.value, exam_subcategory, subject],
                     is_active=True,
