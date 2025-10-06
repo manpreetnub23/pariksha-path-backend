@@ -103,7 +103,14 @@ class Course(Document):
         if not v:
             return v
 
-        names = [section.name.lower() for section in v]
+        # Handle both string sections and Section object sections
+        if isinstance(v[0], str):
+            # Sections are stored as strings
+            names = [section.lower() for section in v]
+        else:
+            # Sections are Section objects
+            names = [section.name.lower() for section in v]
+
         if len(names) != len(set(names)):
             raise ValueError("Section names must be unique (case-insensitive)")
         return v
@@ -111,9 +118,18 @@ class Course(Document):
     def get_section(self, section_name: str) -> Optional[Section]:
         """Get a section by name (case-insensitive)"""
         section_name = section_name.lower().strip()
-        for section in self.sections:
-            if section.name.lower() == section_name:
-                return section
+
+        # Handle both string sections and Section object sections
+        if isinstance(self.sections[0], str):
+            # Sections are stored as strings
+            for section in self.sections:
+                if section.lower() == section_name:
+                    return section  # Return the string section name
+        else:
+            # Sections are Section objects
+            for section in self.sections:
+                if section.name.lower() == section_name:
+                    return section
         return None
 
     def get_section_names(self) -> List[str]:

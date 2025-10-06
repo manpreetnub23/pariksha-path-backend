@@ -115,9 +115,18 @@ class SectionService:
             raise ValueError("Section with this name already exists")
 
         # Update section name
-        old_name = section.name
-        section.name = new_section_name
-        section.description = f"Section: {new_section_name}"
+        old_name = section_name  # The section_name parameter is the old name
+
+        if isinstance(course.sections[0], str):
+            # Sections are stored as strings - find and replace
+            for i, section in enumerate(course.sections):
+                if section == old_name:
+                    course.sections[i] = new_section_name
+                    break
+        else:
+            # Sections are Section objects - update the object
+            section.name = new_section_name
+            section.description = f"Section: {new_section_name}"
 
         # Update questions in this section to use new section name
         await Question.find({"course_id": course_id, "section": old_name}).update_many(
@@ -182,7 +191,12 @@ class SectionService:
         ).delete_many()
 
         # Remove section from course
-        course.sections = [s for s in course.sections if s.name != section_name]
+        if isinstance(course.sections[0], str):
+            # Sections are stored as strings
+            course.sections = [s for s in course.sections if s != section_name]
+        else:
+            # Sections are Section objects
+            course.sections = [s for s in course.sections if s.name != section_name]
 
         # Update order of remaining sections
         for i, remaining_section in enumerate(course.sections):
