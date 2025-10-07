@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Optional, Dict, Any
 
 from ...models.user import User
+from ...models.course import Course
+from ...models.course_enrollment import CourseEnrollment
 from ...models.enums import UserRole, ExamCategory
 from ...dependencies import admin_required
 from ...services.admin_service import AdminService
@@ -122,6 +124,30 @@ async def get_student(
         # Get additional details
         additional_info = await StudentService.get_student_additional_info(student_id)
 
+        # Get course enrollments with validity information
+        course_enrollments = await CourseEnrollment.find({"user_id": student_id}).sort([("enrolled_at", -1)]).to_list()
+
+        # Enrich enrollments with course details
+        enriched_enrollments = []
+        for enrollment in course_enrollments:
+            course = await Course.get(enrollment.course_id)
+            if course:
+                enrollment_data = {
+                    "id": str(enrollment.id),
+                    "course_id": enrollment.course_id,
+                    "course_title": course.title,
+                    "course_code": course.code,
+                    "course_category": course.category.value,
+                    "enrolled_at": enrollment.enrolled_at,
+                    "expires_at": enrollment.expires_at,
+                    "is_active": enrollment.is_active,
+                    "is_expired": enrollment.is_expired(),
+                    "days_remaining": enrollment.days_remaining(),
+                    "enrollment_source": enrollment.enrollment_source,
+                    "validity_period_days": course.validity_period_days,
+                }
+                enriched_enrollments.append(enrollment_data)
+
         # Log admin action
         await AdminService.log_admin_action(
             str(current_user.id),
@@ -136,6 +162,7 @@ async def get_student(
             data={
                 "student": student_response,
                 "additional_info": additional_info,
+                "course_enrollments": enriched_enrollments,
             },
         )
 

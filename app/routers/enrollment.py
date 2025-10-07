@@ -1,8 +1,10 @@
 # app/routers/enrollment.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from beanie import PydanticObjectId
+from datetime import datetime, timedelta
 from ..models.user import User
 from ..models.course import Course
+from ..models.course_enrollment import CourseEnrollment
 from ..auth import AuthService
 from ..db import get_db_client
 
@@ -23,6 +25,16 @@ async def enroll_course(course_id: str, user: User = Depends(AuthService.get_cur
         if course_id not in user.enrolled_courses:
             user.enrolled_courses.append(course_id)
             await user.save()
+
+            # Create course enrollment record with validity period
+            expires_at = datetime.now() + timedelta(days=course.validity_period_days)
+            enrollment = CourseEnrollment(
+                user_id=str(user.id),
+                course_id=course_id,
+                expires_at=expires_at,
+                enrollment_source="direct_enrollment"
+            )
+            await enrollment.insert()
 
         return {"success": True, "message": f"Enrolled in {course.title}"}
 

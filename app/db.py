@@ -5,11 +5,10 @@ from typing import Optional
 import os
 import time
 
-import motor.motor_asyncio
 from pymongo.server_api import ServerApi
 from beanie import init_beanie
-from pymongo.errors import PyMongoError
-
+import motor
+from motor.motor_asyncio import AsyncIOMotorClient
 from .config import settings
 from .models.user import User
 from .models.question import Question
@@ -23,7 +22,7 @@ from .models.exam_category_structure import ExamCategoryStructure
 from .models.contact import Contact
 
 # Globals (one client + one beanie-init flag per process)
-_global_client: Optional[motor.motor_asyncio.AsyncIOMotorClient] = None
+_global_client: Optional[AsyncIOMotorClient] = None
 _client_lock = asyncio.Lock()
 
 _beanie_initialized = False

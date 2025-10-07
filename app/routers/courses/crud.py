@@ -209,3 +209,44 @@ async def enroll_in_course(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to enroll in course: {str(e)}",
         )
+
+
+@router.put(
+    "/{course_id}/toggle-visibility",
+    response_model=Dict[str, Any],
+    summary="Toggle course visibility",
+    description="Admin endpoint to toggle course visibility (is_active)",
+)
+async def toggle_course_visibility(
+    course_id: str,
+    current_user: User = Depends(admin_required),
+):
+    """Toggle course visibility (Admin only)"""
+    try:
+        # Fetch the course
+        course = await Course.get(course_id)
+        if not course:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Course not found",
+            )
+
+        # Toggle visibility
+        course.is_active = not course.is_active
+        await course.save()
+
+        return {
+            "message": f"Course visibility set to {course.is_active}",
+            "course": {
+                "id": str(course.id),
+                "title": course.title,
+                "is_active": course.is_active,
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to toggle course visibility: {str(e)}",
+        )

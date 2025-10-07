@@ -3,13 +3,14 @@ Course service for course management operations
 """
 
 from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 from bson import ObjectId
 
 from ..models.course import Course, Section
 from ..models.question import Question, QuestionType, DifficultyLevel, QuestionOption
 from ..models.admin_action import AdminAction, ActionType
 from ..models.user import User
+from ..models.course_enrollment import CourseEnrollment
 from ..models.enums import ExamCategory
 from .admin_service import AdminService
 
@@ -59,6 +60,7 @@ class CourseService:
             price=course_data["price"],
             is_free=course_data["is_free"],
             discount_percent=course_data.get("discount_percent"),
+            validity_period_days=course_data.get("validity_period_days", 365),
             material_ids=course_data.get("material_ids", []),
             test_series_ids=course_data.get("test_series_ids", []),
             thumbnail_url=course_data["thumbnail_url"],
@@ -174,6 +176,7 @@ class CourseService:
                 "price": course.price,
                 "is_free": course.is_free,
                 "discount_percent": course.discount_percent,
+                "validity_period_days": getattr(course, "validity_period_days", 365),
                 "thumbnail_url": course.thumbnail_url,
                 "icon_url": getattr(course, "icon_url", None),
                 "banner_url": getattr(course, "banner_url", None),
@@ -228,6 +231,7 @@ class CourseService:
                 "price": course.price,
                 "is_free": course.is_free,
                 "discount_percent": course.discount_percent,
+                "validity_period_days": getattr(course, "validity_period_days", 365),
                 "material_ids": course.material_ids,
                 "test_series_ids": course.test_series_ids,
                 "thumbnail_url": course.thumbnail_url,
@@ -375,6 +379,18 @@ class CourseService:
                 current_user.update_timestamp()
                 await current_user.save()
 
+                # Create course enrollment record
+                expires_at = datetime.now() + timedelta(
+                    days=course.validity_period_days
+                )
+                enrollment = CourseEnrollment(
+                    user_id=str(current_user.id),
+                    course_id=course_id,
+                    expires_at=expires_at,
+                    enrollment_source="free_enrollment",
+                )
+                await enrollment.insert()
+
                 # Increment enrolled students count
                 course.enrolled_students_count += 1
                 course.update_timestamp()
@@ -393,6 +409,18 @@ class CourseService:
                     current_user.enrolled_courses.append(course_id)
                     current_user.update_timestamp()
                     await current_user.save()
+
+                    # Create course enrollment record
+                    expires_at = datetime.now() + timedelta(
+                        days=course.validity_period_days
+                    )
+                    enrollment = CourseEnrollment(
+                        user_id=str(current_user.id),
+                        course_id=course_id,
+                        expires_at=expires_at,
+                        enrollment_source="premium_access",
+                    )
+                    await enrollment.insert()
 
                     # Increment enrolled students count
                     course.enrolled_students_count += 1

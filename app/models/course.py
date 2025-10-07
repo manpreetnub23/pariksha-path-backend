@@ -65,6 +65,9 @@ class Course(Document):
     description: str
     syllabus_id: Optional[str] = None  # Reference to detailed syllabus model
 
+    # Access validity
+    validity_period_days: int = 365  # Number of days course access is valid after enrollment
+
     @validator("sections", pre=True)
     def convert_string_sections_to_objects(cls, v):
         """Convert string sections to Section objects during migration"""
