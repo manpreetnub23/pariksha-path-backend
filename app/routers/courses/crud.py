@@ -64,11 +64,11 @@ async def list_courses(
     search: Optional[str] = Query(None, description="Search in title and description"),
     section: Optional[str] = Query(None, description="Filter by section"),
     is_free: Optional[bool] = Query(None, description="Filter by free courses"),
-    is_active: Optional[bool] = Query(True, description="Filter by active status"),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
     sort_by: str = Query("priority_order", description="Field to sort by"),
     sort_order: str = Query("asc", description="Sort order (asc or desc)"),
     page: int = Query(1, description="Page number", ge=1),
-    limit: int = Query(10, description="Items per page", ge=1, le=100),
+    limit: int = Query(10, description="Items per page", ge=1, le=1000),
     current_user: Optional[User] = Depends(get_current_user),
 ):
     """List all courses with filters and pagination"""
