@@ -5,6 +5,7 @@ Course CRUD operations router
 from fastapi import APIRouter, HTTPException, Depends, status, Query
 from typing import Optional, Dict, Any
 
+from ...models.course import Course
 from ...models.user import User
 from ...models.enums import ExamCategory
 from ...dependencies import admin_required, get_current_user

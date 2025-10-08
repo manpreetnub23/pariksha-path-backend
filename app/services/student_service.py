@@ -95,6 +95,7 @@ class StudentService:
         if student and student.role == UserRole.STUDENT:
             return student
         return None
+    
 
     @staticmethod
     async def update_student_data(
