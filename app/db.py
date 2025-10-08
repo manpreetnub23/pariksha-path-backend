@@ -19,6 +19,7 @@ from .models.course import Course
 from .models.study_material import StudyMaterial, UserMaterialProgress
 from .models.exam_content import ExamContent
 from .models.exam_category_structure import ExamCategoryStructure
+from .models.course_enrollment import CourseEnrollment
 from .models.contact import Contact
 
 # Globals (one client + one beanie-init flag per process)
@@ -138,6 +139,7 @@ async def init_beanie_if_needed() -> None:
                     TestSession,
                     UserAnalytics,
                     AdminAction,
+                    CourseEnrollment,
                     Course,
                     StudyMaterial,
                     UserMaterialProgress,
