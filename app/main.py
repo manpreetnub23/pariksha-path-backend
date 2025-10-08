@@ -176,6 +176,7 @@ app.include_router(payment_router)
 app.include_router(enrollment_router)
 app.include_router(examcontent_router)
 
+
 # Health check endpoints
 @app.get("/")
 async def root():
@@ -230,106 +231,104 @@ async def db_health_check():
             "server_time": datetime.now().isoformat(),
         }
 
+        # # API Routes Groups
+        # @app.get("/api/v1/test")
+        # async def test_endpoint():
+        #     return {"message": "API v1 is working!"}
 
-# API Routes Groups
-@app.get("/api/v1/test")
-async def test_endpoint():
-    return {"message": "API v1 is working!"}
+        # # Course routes - Protected
+        # @app.get("/api/v1/courses")
+        # async def get_courses(
+        #     category: Optional[ExamCategory] = Query(
+        #         None, description="Filter by exam category"
+        #     ),
+        #     search: Optional[str] = Query(None, description="Search in title and description"),
+        #     is_free: Optional[bool] = Query(None, description="Filter by free courses"),
+        #     sort_by: str = Query("priority_order", description="Field to sort by"),
+        #     sort_order: str = Query("asc", description="Sort order (asc or desc)"),
+        #     page: int = Query(1, description="Page number", ge=1),
+        #     limit: int = Query(10, description="Items per page", ge=1, le=100),
+        #     current_user: User = Depends(get_current_user),
+        # ):
+        #     """Get all available courses with filtering and pagination"""
+        #     try:
 
+        #         query_filters = {"is_active": True}
 
-# Course routes - Protected
-@app.get("/api/v1/courses")
-async def get_courses(
-    category: Optional[ExamCategory] = Query(
-        None, description="Filter by exam category"
-    ),
-    search: Optional[str] = Query(None, description="Search in title and description"),
-    is_free: Optional[bool] = Query(None, description="Filter by free courses"),
-    sort_by: str = Query("priority_order", description="Field to sort by"),
-    sort_order: str = Query("asc", description="Sort order (asc or desc)"),
-    page: int = Query(1, description="Page number", ge=1),
-    limit: int = Query(10, description="Items per page", ge=1, le=100),
-    current_user: User = Depends(get_current_user),
-):
-    """Get all available courses with filtering and pagination"""
-    try:
+        #         if category:
+        #             query_filters["category"] = category
 
-        query_filters = {"is_active": True}
+        #         if is_free is not None:
+        #             query_filters["is_free"] = is_free
 
-        if category:
-            query_filters["category"] = category
+        #         if search:
+        #             query_filters["$or"] = [
+        #                 {"title": {"$regex": search, "$options": "i"}},
+        #                 {"description": {"$regex": search, "$options": "i"}},
+        #             ]
 
-        if is_free is not None:
-            query_filters["is_free"] = is_free
+        #         skip = (page - 1) * limit
 
-        if search:
-            query_filters["$or"] = [
-                {"title": {"$regex": search, "$options": "i"}},
-                {"description": {"$regex": search, "$options": "i"}},
-            ]
+        #         sort_direction = 1 if sort_order == "asc" else -1
 
-        skip = (page - 1) * limit
+        #         try:
+        #             courses = (
+        #                 await Course.find(query_filters)
+        #                 .sort([(sort_by, sort_direction)])
+        #                 .skip(skip)
+        #                 .limit(limit)
+        #                 .to_list()
+        #             )
 
-        sort_direction = 1 if sort_order == "asc" else -1
+        #             total_courses = await Course.find(query_filters).count()
+        #             total_pages = (total_courses + limit - 1) // limit
 
-        try:
-            courses = (
-                await Course.find(query_filters)
-                .sort([(sort_by, sort_direction)])
-                .skip(skip)
-                .limit(limit)
-                .to_list()
-            )
+        #             course_list = []
 
-            total_courses = await Course.find(query_filters).count()
-            total_pages = (total_courses + limit - 1) // limit
+        #             for course in courses:
+        #                 try:
+        #                     course_data = {
+        #                         "id": str(course.id),
+        #                         "title": course.title,
+        #                         "code": course.code,
+        #                         "category": course.category.value,
+        #                         "sub_category": course.sub_category,
+        #                         "description": course.description,
+        #                         "sections": getattr(course, "sections", []),
+        #                         "price": course.price,
+        #                         "is_free": course.is_free,
+        #                         "discount_percent": course.discount_percent,
+        #                         "thumbnail_url": course.thumbnail_url,
+        #                         "material_count": len(getattr(course, "material_ids", [])),
+        #                         "test_series_count": len(
+        #                             getattr(course, "test_series_ids", [])
+        #                         ),
+        #                         "enrolled_students_count": getattr(
+        #                             course, "enrolled_students_count", 0
+        #                         ),
+        #                     }
+        #                     course_list.append(course_data)
+        #                 except Exception as e:
 
-            course_list = []
+        #                     import traceback
 
-            for course in courses:
-                try:
-                    course_data = {
-                        "id": str(course.id),
-                        "title": course.title,
-                        "code": course.code,
-                        "category": course.category.value,
-                        "sub_category": course.sub_category,
-                        "description": course.description,
-                        "sections": getattr(course, "sections", []),
-                        "price": course.price,
-                        "is_free": course.is_free,
-                        "discount_percent": course.discount_percent,
-                        "thumbnail_url": course.thumbnail_url,
-                        "material_count": len(getattr(course, "material_ids", [])),
-                        "test_series_count": len(
-                            getattr(course, "test_series_ids", [])
-                        ),
-                        "enrolled_students_count": getattr(
-                            course, "enrolled_students_count", 0
-                        ),
-                    }
-                    course_list.append(course_data)
-                except Exception as e:
+        #             return {
+        #                 "message": "Courses retrieved successfully",
+        #                 "courses": course_list,
+        #                 "pagination": {
+        #                     "total": total_courses,
+        #                     "page": page,
+        #                     "limit": limit,
+        #                     "total_pages": total_pages,
+        #                 },
+        #             }
 
-                    import traceback
+        #         except Exception as e:
+        #             import traceback
 
-            return {
-                "message": "Courses retrieved successfully",
-                "courses": course_list,
-                "pagination": {
-                    "total": total_courses,
-                    "page": page,
-                    "limit": limit,
-                    "total_pages": total_pages,
-                },
-            }
+        #             raise
 
-        except Exception as e:
-            import traceback
-
-            raise
-
-    except Exception as e:
+        #     except Exception as e:
         import traceback
 
         raise HTTPException(
@@ -338,7 +337,6 @@ async def get_courses(
         )
 
 
-# Admin routes - Admin only
 @app.get("/api/v1/admin/dashboard")
 async def admin_dashboard(current_user: User = Depends(get_current_user)):
     if current_user.role != UserRole.ADMIN:
@@ -473,23 +471,24 @@ class UserUpdateRequest(BaseModel):
 
 # In main.py
 
+
 @app.get("/api/v1/db-status")
 async def db_status_check():
     """Check database and Beanie initialization status"""
     try:
         from .db import _beanie_initialized, get_db_client
-        
+
         # Check if Beanie is initialized
         beanie_status = "initialized" if _beanie_initialized else "not initialized"
-        
+
         # Check database connection
         start_time = datetime.now()
         client = await get_db_client()
         ping_time = (datetime.now() - start_time).total_seconds() * 1000
-        
+
         # Test with a ping command
         await client.admin.command("ping")
-        
+
         return {
             "status": "healthy",
             "beanie": beanie_status,
@@ -503,6 +502,7 @@ async def db_status_check():
             "error_type": type(e).__name__,
             "server_time": datetime.now().isoformat(),
         }
+
 
 @app.post("/api/v1/dev/create_user")
 async def create_user(user_data: UserCreateRequest):

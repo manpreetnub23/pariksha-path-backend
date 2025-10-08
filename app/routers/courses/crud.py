@@ -26,7 +26,7 @@ async def test_endpoint():
 
 
 @router.post(
-    "/",
+    "",
     response_model=Dict[str, Any],
     status_code=status.HTTP_201_CREATED,
     summary="Create a new course",
@@ -52,7 +52,7 @@ async def create_course(
 
 
 @router.get(
-    "/",
+    "",
     response_model=Dict[str, Any],
     summary="List all courses",
     description="Get a paginated list of all available courses with optional filters",
@@ -242,7 +242,7 @@ async def toggle_course_visibility(
                 "id": str(course.id),
                 "title": course.title,
                 "is_active": course.is_active,
-            }
+            },
         }
     except HTTPException:
         raise
