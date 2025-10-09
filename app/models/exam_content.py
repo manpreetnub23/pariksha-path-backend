@@ -20,7 +20,6 @@ class ExamContent(Document):
 
     exam_info_sections: List[ExamInfoSection] = Field(default_factory=list)
 
-    linked_course_id: Optional[str] = None
     thumbnail_url: Optional[str] = None
     banner_url: Optional[str] = None
     is_active: bool = True
