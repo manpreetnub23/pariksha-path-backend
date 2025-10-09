@@ -7,8 +7,12 @@ from typing import Optional, Dict, Any
 
 from ...models.course import Course
 from ...models.user import User
-from ...models.enums import ExamCategory
-from ...dependencies import admin_required, get_current_user
+from ...models.enums import ExamCategory, UserRole
+from ...dependencies import (
+    admin_required,
+    get_current_user,
+    get_current_user_optional,
+)
 from ...services.course_service import CourseService
 from .schemas import (
     CourseCreateRequest,
@@ -69,10 +73,23 @@ async def list_courses(
     sort_order: str = Query("asc", description="Sort order (asc or desc)"),
     page: int = Query(1, description="Page number", ge=1),
     limit: int = Query(10, description="Items per page", ge=1, le=1000),
-    current_user: Optional[User] = Depends(get_current_user),
+    show_all: bool = Query(
+        False, description="Admin only: include inactive courses in the results"
+    ),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """List all courses with filters and pagination"""
     try:
+        if show_all:
+            if current_user is None or current_user.role != UserRole.ADMIN:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Admin access required to view all courses",
+                )
+            # Admin wants all courses, ignore client-supplied is_active filter unless provided
+            if is_active is None:
+                is_active = None
+
         result = await CourseService.list_courses(
             category=category,
             search=search,

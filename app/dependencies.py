@@ -1,5 +1,8 @@
+from typing import Optional
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 from .models.user import User
 from .models.enums import UserRole
 from .auth import AuthService
@@ -7,6 +10,7 @@ from .db import init_db
 
 # Security setup
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 
 
@@ -25,6 +29,14 @@ async def get_current_user(
     print(credentials)
     return await AuthService.get_current_user(credentials.credentials)
 
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+) -> Optional[User]:
+    """Return current user if credentials are provided, otherwise None."""
+    if not credentials:
+        return None
+    return await AuthService.get_current_user(credentials.credentials)
 
 
 # Admin-only middleware
