@@ -146,13 +146,16 @@ class CourseService:
         # Calculate pagination
         skip = (page - 1) * limit
 
-        # Set sort order
+        # Set sort order with secondary sort for consistent category ordering across auth states
         sort_direction = 1 if sort_order == "asc" else -1
+        
+        # Primary sort by priority_order, secondary sort by category for consistent ordering
+        sort_criteria = [("priority_order", sort_direction), ("category", 1), ("title", 1)]
 
-        # Fetch courses
+        # Fetch courses with improved sorting for consistent category ordering
         courses = (
             await Course.find(query_filters)
-            .sort([(sort_by, sort_direction)])
+            .sort(sort_criteria)
             .skip(skip)
             .limit(limit)
             .to_list()
@@ -279,7 +282,6 @@ class CourseService:
         if changes:
             course.update_timestamp()
             await course.save()
-
             # Log admin action
             await AdminService.log_admin_action(
                 str(current_user.id),
@@ -288,7 +290,6 @@ class CourseService:
                 course_id,
                 changes,
             )
-
             return {
                 "message": "Course updated successfully",
                 "course_id": course_id,
