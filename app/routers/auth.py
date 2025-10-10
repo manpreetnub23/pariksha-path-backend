@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, status, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, status, BackgroundTasks, Request
 from fastapi.security import HTTPAuthorizationCredentials
 from ..auth import (
     AuthService,
@@ -12,8 +12,10 @@ from ..auth import (
     ResetPasswordWithOTPRequest,
 )
 from ..models.user import User
+from ..models.user_session import UserSession
 from ..services.email_service import EmailService
 from ..services.otp_service import OTPService
+from ..services.session_service import SessionService
 from ..dependencies import get_current_user, security, ensure_db
 from typing import Dict, Any
 from datetime import datetime, timezone
@@ -87,12 +89,12 @@ async def register(user_data: UserRegisterRequest, background_tasks: BackgroundT
     summary="Login user",
     description="Authenticate user and either return tokens or request OTP verification",
 )
-async def login(login_data: UserLoginRequest):
+async def login(
+    request_data: UserLoginRequest,
+    request: Request = None,
+):
     """
-    Login with email and password.
-
-    - **email**: Registered email address
-    - **password**: User password
+    Authenticate user and either return tokens or request OTP verification.
 
     If OTP verification is enabled, an OTP will be sent to the user's email,
     and the user will need to verify it before receiving tokens.
@@ -103,7 +105,7 @@ async def login(login_data: UserLoginRequest):
         from ..config import settings
 
         user = await AuthService.authenticate_user(
-            login_data.email, login_data.password
+            request_data.email, request_data.password
         )
 
         if not user:
@@ -160,6 +162,25 @@ async def login(login_data: UserLoginRequest):
             expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         )
 
+        # Create session for the new refresh token
+        try:
+            # Extract device info from request (if available)
+            user_agent = None
+            ip_address = None
+            if request:
+                user_agent = request.headers.get("user-agent")
+                ip_address = request.client.host if request.client else None
+
+            await SessionService.create_session(
+                user_id=str(user.id),
+                refresh_token=token.refresh_token,
+                user_agent=user_agent,
+                ip_address=ip_address
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create session for user {user.email}: {str(e)}")
+            # Continue with login even if session creation fails
+
         return LoginResponse(
             message="Login successful",
             requires_verification=False,
@@ -210,20 +231,31 @@ async def get_current_user_profile(current_user: User = Depends(get_current_user
     "/refresh",
     response_model=Token,
     summary="Refresh access token",
-    description="Get a new access token using refresh token",
+    description="Get a new access token using refresh token with proper session management",
 )
 async def refresh_access_token(
     credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request = None,
 ):
     """
-    Refresh access token using refresh token.
+    Refresh access token using refresh token with session management.
 
-    Send refresh token in Authorization header to get new access token hehe.
+    This endpoint now:
+    1. Validates the refresh token against active sessions
+    2. Creates new token pair with rotation
+    3. Blacklists the old refresh token
+    4. Creates new session record
     """
     import jwt
     from ..auth import SECRET_KEY, ALGORITHM
 
     try:
+        # Extract device information from request
+        user_agent = None
+        ip_address = None
+        if request:
+            user_agent = request.headers.get("user-agent")
+            ip_address = request.client.host if request.client else None
 
         # Verify refresh token
         payload = jwt.decode(
@@ -247,12 +279,43 @@ async def refresh_access_token(
                 detail="User not found or inactive",
             )
 
+        # Validate session and check for blacklisting
+        session = await SessionService.validate_session(credentials.credentials)
+
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session expired or invalid",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Check for suspicious activity
+        if session.suspicious_activity:
+            logger.warning(f"Suspicious session refresh attempt for user {email}")
+            # Still allow refresh but log the activity
+            session.add_activity_log("suspicious_refresh", "Refresh attempt on suspicious session")
+
+        # Blacklist the old refresh token by deactivating the session
+        await SessionService.blacklist_refresh_token(credentials.credentials)
+
         # Create new tokens
         access_token = AuthService.create_access_token(data={"sub": user.email})
         refresh_token = AuthService.create_refresh_token(data={"sub": user.email})
 
+        # Create new session for the new refresh token
+        new_session = await SessionService.create_session(
+            user_id=str(user.id),
+            refresh_token=refresh_token,
+            user_agent=user_agent,
+            ip_address=ip_address
+        )
+
+        logger.info(f"✅ Token refreshed successfully for user {email}, new session: {new_session.id}")
+
         return Token(
-            access_token=access_token, refresh_token=refresh_token, token_type="bearer"
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer"
         )
 
     except jwt.PyJWTError:
@@ -261,7 +324,10 @@ async def refresh_access_token(
             detail="Invalid refresh token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Token refresh failed for user {email}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Token refresh failed: {str(e)}",
@@ -326,6 +392,7 @@ async def send_verification_email(
 )
 async def verify_login(
     request_data: dict,
+    request: Request = None,
 ):  # {"email": "user@example.com", "otp": "123456"}
     """
     Verify login with OTP.
@@ -371,6 +438,25 @@ async def verify_login(
                 token_type="bearer",
                 expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             )
+
+            # Create session for the new refresh token
+            try:
+                # Extract device info from request (if available)
+                user_agent = None
+                ip_address = None
+                if request:
+                    user_agent = request.headers.get("user-agent")
+                    ip_address = request.client.host if request.client else None
+
+                await SessionService.create_session(
+                    user_id=str(user.id),
+                    refresh_token=token.refresh_token,
+                    user_agent=user_agent,
+                    ip_address=ip_address
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create session for user {user.email}: {str(e)}")
+                # Continue with login even if session creation fails
 
             return {
                 "message": "Login verification successful",
@@ -454,6 +540,7 @@ async def verify_email(
 )
 async def verify_registration_email(
     request_data: dict,  # {"email": "user@example.com", "otp": "123456"}
+    request: Request = None,
 ):
     """
     Verify email with OTP after registration without requiring login.
@@ -498,6 +585,25 @@ async def verify_registration_email(
                 token_type="bearer",
                 expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             )
+
+            # Create session for the new refresh token
+            try:
+                # Extract device info from request (if available)
+                user_agent = None
+                ip_address = None
+                if request:
+                    user_agent = request.headers.get("user-agent")
+                    ip_address = request.client.host if request.client else None
+
+                await SessionService.create_session(
+                    user_id=str(user.id),
+                    refresh_token=token.refresh_token,
+                    user_agent=user_agent,
+                    ip_address=ip_address
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create session for user {user.email}: {str(e)}")
+                # Continue with verification even if session creation fails
 
             return {
                 "message": "Email verified successfully",
@@ -685,20 +791,39 @@ async def change_password(
 @router.post(
     "/logout",
     response_model=Dict[str, str],
-    summary="Logout user",
-    description="Logout current user (client-side token removal)",
+    summary="Logout user with session invalidation",
+    description="Logout current user and invalidate all active sessions",
 )
 async def logout(current_user: User = Depends(get_current_user)):
     """
-    Logout user.
+    Enhanced logout with proper session management:
 
-    Note: This is mainly for client-side token removal.
-    JWT tokens remain valid until expiry.
+    1. Invalidates all active sessions for the user
+    2. Blacklists all refresh tokens
+    3. Logs the logout activity
+    4. Returns confirmation
     """
-    return {
-        "message": "Logged out successfully",
-        "instruction": "Please remove tokens from client storage",
-    }
+    try:
+        user_id = str(current_user.id)
+
+        # Invalidate all user sessions
+        invalidated_count = await SessionService.invalidate_all_user_sessions(user_id)
+
+        logger.info(f"🚪 User {current_user.email} logged out, invalidated {invalidated_count} sessions")
+
+        return {
+            "message": "Logged out successfully",
+            "detail": f"Invalidated {invalidated_count} active sessions",
+            "sessions_invalidated": invalidated_count,
+            "instruction": "All tokens are now invalid across all devices"
+        }
+
+    except Exception as e:
+        logger.error(f"Logout failed for user {current_user.email}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Logout failed: {str(e)}",
+        )
 
 
 @router.post(
@@ -806,17 +931,118 @@ async def reset_password_with_otp(reset_data: ResetPasswordWithOTPRequest):
 
 
 @router.get(
-    "/verify-token",
+    "/sessions",
     response_model=Dict[str, Any],
-    summary="Verify token validity",
-    description="Check if the provided token is valid",
+    summary="Get user sessions",
+    description="Get all active sessions for the current user",
 )
-async def verify_token(current_user: User = Depends(get_current_user)):
+async def get_user_sessions(current_user: User = Depends(get_current_user)):
     """
-    Verify if the provided token is valid and return user info.
+    Get all active sessions for the current user.
+
+    Returns session information including device details and activity.
     """
-    return {
-        "valid": True,
-        "user": AuthService.convert_user_to_response(current_user),
-        "message": "Token is valid",
-    }
+    try:
+        sessions = await SessionService.get_user_sessions(str(current_user.id))
+        session_data = [session.to_dict() for session in sessions]
+
+        return {
+            "message": "Sessions retrieved successfully",
+            "sessions": session_data,
+            "total_active": len(session_data)
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve sessions for user {current_user.email}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve sessions: {str(e)}",
+        )
+
+
+@router.post(
+    "/sessions/{session_id}/invalidate",
+    response_model=Dict[str, str],
+    summary="Invalidate specific session",
+    description="Invalidate a specific session by ID",
+)
+async def invalidate_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Invalidate a specific session for the current user.
+
+    This will blacklist the refresh token for that session.
+    """
+    try:
+        # Find the session
+        session = await UserSession.get(session_id)
+
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Session not found"
+            )
+
+        # Verify ownership
+        if session.user_id != str(current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only invalidate your own sessions"
+            )
+
+        # Invalidate the session
+        session.deactivate()
+        await session.save()
+
+        logger.info(f"🔒 Session {session_id} invalidated by user {current_user.email}")
+
+        return {
+            "message": "Session invalidated successfully",
+            "session_id": session_id,
+            "detail": "Refresh token for this session is now blacklisted"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to invalidate session {session_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to invalidate session: {str(e)}",
+        )
+
+
+@router.post(
+    "/logout-all",
+    response_model=Dict[str, str],
+    summary="Logout from all devices",
+    description="Invalidate all sessions across all devices for the current user",
+)
+async def logout_all_devices(current_user: User = Depends(get_current_user)):
+    """
+    Force logout from all devices by invalidating all sessions.
+
+    This is useful for security purposes or when user wants to ensure
+    no other sessions remain active.
+    """
+    try:
+        user_id = str(current_user.id)
+        invalidated_count = await SessionService.invalidate_all_user_sessions(user_id)
+
+        logger.info(f"🚪🔥 All sessions invalidated for user {current_user.email} ({invalidated_count} sessions)")
+
+        return {
+            "message": "Logged out from all devices successfully",
+            "detail": f"Invalidated {invalidated_count} sessions across all devices",
+            "sessions_invalidated": invalidated_count,
+            "instruction": "All tokens are now invalid across all devices and browsers"
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to logout all devices for user {current_user.email}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to logout all devices: {str(e)}",
+        )

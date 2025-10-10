@@ -22,7 +22,8 @@ class EmailService:
 
             # Prepare email parameters
             params = {
-                "from": settings.SENDER_EMAIL or "Pariksha Path <onboarding@resend.dev>",
+                "from": settings.SENDER_EMAIL
+                or "Pariksha Path <onboarding@resend.dev>",
                 "to": [to_email],
                 "subject": subject,
                 "html": body,  # Use HTML for better formatting
@@ -32,7 +33,9 @@ class EmailService:
             result = resend.Emails.send(params)
 
             if result and result.get("id"):
-                print(f"Email sent successfully to {to_email} via Resend (ID: {result['id']})")
+                print(
+                    f"Email sent successfully to {to_email} via Resend (ID: {result['id']})"
+                )
                 return True
             else:
                 print(f"Failed to send email - no ID returned: {result}")
@@ -64,7 +67,7 @@ This code will expire in 10 minutes.
 If you didn't request this, please ignore this email.
 
 Best regards,
-Pariksha Path Team
+My Parikshapath Team
         """
         return await EmailService.send_email(email, subject, body)
 
@@ -75,7 +78,7 @@ Pariksha Path Team
         body = f"""
 Dear User,
 
-You requested a password reset for your Pariksha Path account.
+You requested a password reset for your My Parikshapath account.
 
 Your password reset code is: {otp}
 
@@ -83,14 +86,14 @@ This code will expire in 10 minutes.
 If you didn't request this, please ignore this email.
 
 Best regards,
-Pariksha Path Team
+My Parikshapath Team
         """
         return await EmailService.send_email(email, subject, body)
 
     @staticmethod
     async def send_login_otp_email(email: str, otp: str) -> bool:
         """Send login verification OTP"""
-        subject = "Login Verification - Pariksha Path"
+        subject = "Login Verification - My Parikshapath"
         body = f"""
 Dear User,
 
@@ -102,18 +105,18 @@ This code will expire in 10 minutes.
 If you didn't attempt to login, please contact our support team immediately.
 
 Best regards,
-Pariksha Path Team
+My Parikshapath Team
         """
         return await EmailService.send_email(email, subject, body)
 
     @staticmethod
     async def send_welcome_email(email: str, name: str) -> bool:
         """Send welcome email to new users"""
-        subject = "Welcome to Pariksha Path!"
+        subject = "Welcome to My Parikshapath!"
         body = f"""
 Dear {name},
 
-Welcome to Pariksha Path! We're excited to have you join our community.
+Welcome to My Parikshapath! We're excited to have you join our community.
 
 Your account has been created successfully. To get started:
 
@@ -124,6 +127,6 @@ Your account has been created successfully. To get started:
 If you have any questions, please don't hesitate to contact our support team.
 
 Best regards,
-Pariksha Path Team
+My Parikshapath Team
         """
         return await EmailService.send_email(email, subject, body)
