@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any
 from ...models.user import User
 from ...models.course import Course
 from ...models.course_enrollment import CourseEnrollment
+from ...models.test import TestAttempt, TestSession
 from ...models.enums import UserRole, ExamCategory
 from ...dependencies import admin_required
 from ...services.admin_service import AdminService
@@ -301,6 +302,75 @@ async def deactivate_student(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to deactivate student: {str(e)}",
+        )
+
+
+@router.delete(
+    "/{student_id}/permanent",
+    response_model=Dict[str, Any],
+    summary="Permanently delete student",
+    description="Admin endpoint to permanently delete a student and all associated data",
+)
+async def permanently_delete_student(
+    student_id: str,
+    current_user: User = Depends(admin_required),
+):
+    """Permanently delete a student and all associated data (Admin only)"""
+    try:
+        # Find the student first
+        student = await StudentService.get_student_by_id(student_id)
+        if not student:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Student not found",
+            )
+
+        # Check if student is already deactivated (safety check)
+        if student.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please deactivate the student before permanent deletion",
+            )
+
+        # Get student email for logging
+        student_email = student.email
+
+        # Delete associated data first
+        # Delete course enrollments
+        await CourseEnrollment.find({"user_id": student_id}).delete()
+
+        # Delete test attempts
+        await TestAttempt.find({"user_id": student_id}).delete()
+
+        # Delete test sessions
+        await TestSession.find({"user_id": student_id}).delete()
+
+        # Delete study materials access (if any)
+        # Note: You might want to add a StudyMaterialAccess model if tracking material access
+
+        # Finally, delete the student
+        await student.delete()
+
+        # Log admin action
+        await AdminService.log_admin_action(
+            str(current_user.id),
+            ActionType.DELETE,
+            "users",
+            student_id,
+            {"action": "permanent_delete", "student_email": student_email},
+        )
+
+        return AdminService.format_response(
+            "Student permanently deleted successfully",
+            student_id=student_id,
+        )
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to permanently delete student: {str(e)}",
         )
 
 
