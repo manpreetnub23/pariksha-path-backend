@@ -63,8 +63,8 @@ origins = [
 ]
 
 app = FastAPI(
-    title="Pariksha Path API",
-    description="Backend API for Pariksha Path",
+    title="My Parikshapath API",
+    description="Backend API for My Parikshapath",
     version="1.0.0",
     lifespan=lifespan,
     # Security configurations

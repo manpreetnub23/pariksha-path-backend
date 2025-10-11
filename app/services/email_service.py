@@ -23,7 +23,7 @@ class EmailService:
             # Prepare email parameters
             params = {
                 "from": settings.SENDER_EMAIL
-                or "Pariksha Path <onboarding@resend.dev>",
+                or "My Parikshpath <onboarding@resend.dev>",
                 "to": [to_email],
                 "subject": subject,
                 "html": body,  # Use HTML for better formatting
