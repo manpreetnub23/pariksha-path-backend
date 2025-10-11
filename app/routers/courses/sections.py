@@ -94,17 +94,21 @@ async def delete_section_from_course(
     current_user: User = Depends(admin_required),
 ):
     """Delete a section and all its questions from a course (Admin only)"""
+    print(f"🔍 Router delete_section_from_course: course_id={course_id}, section_name='{section_name}'")
     try:
         result = await SectionService.delete_section_from_course(
             course_id, section_name, current_user
         )
+        print(f"✅ Router delete_section_from_course success: {result}")
         return result
     except ValueError as e:
+        print(f"❌ Router delete_section_from_course ValueError: {e}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
     except Exception as e:
+        print(f"❌ Router delete_section_from_course Exception: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete section: {str(e)}",

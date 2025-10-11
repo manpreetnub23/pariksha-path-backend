@@ -117,7 +117,7 @@ class SectionService:
         # Update section name
         old_name = section_name  # The section_name parameter is the old name
 
-        if isinstance(course.sections[0], str):
+        if course.sections and isinstance(course.sections[0], str):
             # Sections are stored as strings - find and replace
             for i, section in enumerate(course.sections):
                 if section == old_name:
@@ -175,37 +175,65 @@ class SectionService:
         if not ObjectId.is_valid(course_id):
             raise ValueError("Invalid course ID format")
 
+        print(f"🔍 delete_section_from_course called with: course_id={course_id}, section_name='{section_name}'")
+
         # Get the course
         course = await Course.get(course_id)
         if not course:
             raise ValueError("Course not found")
 
+        print(f"🔍 Course found: {course.title} with sections: {course.sections}")
+
         # Find the section
         section = course.get_section(section_name)
+        print(f"🔍 Searching for section: '{section_name}' -> found: {section}")
+
         if not section:
+            print(f"❌ Section '{section_name}' not found in course")
             raise ValueError(f"Section '{section_name}' not found")
+
+        print(f"✅ Section found, proceeding with deletion")
 
         # Delete all questions in this section
         deleted_questions = await Question.find(
             {"course_id": course_id, "section": section_name}
         ).delete_many()
+        print(f"🔍 Deleted {deleted_questions} questions from section '{section_name}'")
+
+        # Extract the count from DeleteResult (MongoDB returns deleted_count or n)
+        deleted_count = getattr(deleted_questions, 'deleted_count', getattr(deleted_questions, 'n', 0))
+        print(f"🔍 Extracted deleted count: {deleted_count}")
 
         # Remove section from course
-        if isinstance(course.sections[0], str):
+        print(f"🔍 Before deletion: course.sections length = {len(course.sections)}")
+        print(f"🔍 Before deletion: course.sections = {course.sections}")
+
+        if course.sections and isinstance(course.sections[0], str):
             # Sections are stored as strings
+            print(f"🔍 Removing string section: '{section_name}'")
             course.sections = [s for s in course.sections if s != section_name]
-        else:
+            print(f"🔍 After string removal: course.sections = {course.sections}")
+        elif course.sections:
             # Sections are Section objects
+            print(f"🔍 Removing object section: '{section_name}'")
             course.sections = [s for s in course.sections if s.name != section_name]
+            print(f"🔍 After object removal: course.sections = {[s.name for s in course.sections]}")
 
-        # Update order of remaining sections
-        for i, remaining_section in enumerate(course.sections):
-            remaining_section.order = i + 1
+        # Update order of remaining sections only if they are Section objects
+        print(f"🔍 After deletion: course.sections length = {len(course.sections)}")
+        if course.sections and not isinstance(course.sections[0], str):
+            print(f"🔍 Reordering remaining sections...")
+            for i, remaining_section in enumerate(course.sections):
+                print(f"🔍 Setting order for section '{remaining_section.name}': {i + 1}")
+                remaining_section.order = i + 1
 
+        print(f"🔍 Saving course...")
         course.update_timestamp()
         await course.save()
+        print(f"✅ Course saved successfully")
 
         # Log admin action
+        print(f"🔍 Logging admin action...")
         await AdminService.log_admin_action(
             str(current_user.id),
             ActionType.DELETE,
@@ -214,15 +242,18 @@ class SectionService:
             {
                 "action": "section_deleted",
                 "section_name": section_name,
-                "deleted_questions_count": deleted_questions,
+                "deleted_questions_count": deleted_count,
             },
         )
+        print(f"✅ Admin action logged")
 
-        return {
-            "message": f"Section '{section_name}' and {deleted_questions} questions deleted successfully",
+        result = {
+            "message": f"Section '{section_name}' and {deleted_count} questions deleted successfully",
             "course_id": course_id,
-            "deleted_questions_count": deleted_questions,
+            "deleted_questions_count": deleted_count,
         }
+        print(f"🔍 Returning result: {result}")
+        return result
 
     @staticmethod
     async def list_course_sections(course_id: str) -> Dict[str, Any]:
@@ -247,21 +278,36 @@ class SectionService:
         # Get question counts for each section
         sections_with_counts = []
         for section in course.sections:
+            # Handle both string and Section object formats
+            section_name = section if isinstance(section, str) else section.name
+
             question_count = await Question.find(
                 {
                     "course_id": course_id,
-                    "section": section.name,
+                    "section": section_name,
                 }
             ).count()
 
-            sections_with_counts.append(
-                {
-                    "name": section.name,
-                    "description": section.description,
-                    "question_count": question_count,
-                    "order": section.order,
-                }
-            )
+            if isinstance(section, str):
+                # For string sections, create a basic section object for response
+                sections_with_counts.append(
+                    {
+                        "name": section_name,
+                        "description": f"Section: {section_name}",
+                        "question_count": question_count,
+                        "order": 0,  # String sections don't have order
+                    }
+                )
+            else:
+                # For Section objects
+                sections_with_counts.append(
+                    {
+                        "name": section.name,
+                        "description": section.description,
+                        "question_count": question_count,
+                        "order": section.order,
+                    }
+                )
 
         return {
             "message": f"Sections for course '{course.title}' retrieved successfully",
@@ -299,6 +345,18 @@ class SectionService:
         if not section:
             raise ValueError(f"Section '{section_name}' not found in course")
 
+        # Handle both string and Section object formats
+        if isinstance(section, str):
+            # For string sections, create a basic section object for response
+            section_name_clean = section
+            section_description = f"Section: {section}"
+            section_order = 0  # String sections don't have order
+        else:
+            # For Section objects
+            section_name_clean = section.name
+            section_description = section.description
+            section_order = section.order
+
         # Get question count for this section
         question_count = await Question.find(
             {
@@ -315,10 +373,10 @@ class SectionService:
                 "code": course.code,
             },
             "section": {
-                "name": section.name,
-                "description": section.description,
+                "name": section_name_clean,
+                "description": section_description,
                 "question_count": question_count,
-                "order": section.order,
+                "order": section_order,
             },
         }
 
@@ -345,13 +403,20 @@ class SectionService:
         if not section:
             raise ValueError("Section not found")
 
-        section.question_count = new_count
-        await course.save()
+        # Handle both string and Section object formats
+        if isinstance(section, str):
+            # For string sections, we can't update question count (they don't have this field)
+            # This shouldn't happen in normal operation, but handle it gracefully
+            raise ValueError("Cannot update question count for legacy string sections")
+        else:
+            # For Section objects, update the question count
+            section.question_count = new_count
+            await course.save()
 
-        return {
-            "message": "Question count updated",
-            "section": {
-                "name": section.name,
-                "question_count": section.question_count,
-            },
-        }
+            return {
+                "message": "Question count updated",
+                "section": {
+                    "name": section.name,
+                    "question_count": section.question_count,
+                },
+            }

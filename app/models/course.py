@@ -1,9 +1,8 @@
 from beanie import Document
-from pydantic import Field, BaseModel, validator
-from typing import List, Optional, Dict, Any
+from pydantic import Field, BaseModel, field_validator
+from typing import List, Optional
 from datetime import datetime, timezone
 from .enums import ExamCategory
-import re
 import uuid
 
 
@@ -45,7 +44,7 @@ class Section(BaseModel):
     # NEW: PDF and file management
     files: List[SectionFile] = Field(default_factory=list)
 
-    @validator("name")
+    @field_validator("name")
     def validate_name(cls, v):
         if not v.strip():
             raise ValueError("Section name cannot be empty")
@@ -66,9 +65,11 @@ class Course(Document):
     syllabus_id: Optional[str] = None  # Reference to detailed syllabus model
 
     # Access validity
-    validity_period_days: int = 365  # Number of days course access is valid after enrollment
+    validity_period_days: int = (
+        365  # Number of days course access is valid after enrollment
+    )
 
-    @validator("sections", pre=True)
+    @field_validator("sections", mode="before")
     def convert_string_sections_to_objects(cls, v):
         """Convert string sections to Section objects during migration"""
         if not v:
@@ -101,7 +102,7 @@ class Course(Document):
 
         return filtered_sections
 
-    @validator("sections")
+    @field_validator("sections")
     def validate_section_names_unique(cls, v):
         if not v:
             return v
@@ -119,31 +120,39 @@ class Course(Document):
         return v
 
     def get_section(self, section_name: str) -> Optional[Section]:
-        """Get a section by name (case-insensitive)"""
-        section_name = section_name.lower().strip()
+        """Get a section by name (case-insensitive, ignoring surrounding whitespace)."""
+        target_name = section_name.lower().strip()
 
-        # Handle both string sections and Section object sections
-        if isinstance(self.sections[0], str):
-            # Sections are stored as strings
-            for section in self.sections:
-                if section.lower() == section_name:
-                    return section  # Return the string section name
-        else:
-            # Sections are Section objects
-            for section in self.sections:
-                if section.name.lower() == section_name:
+        for section in self.sections:
+            if isinstance(section, str):
+                current_name = section.lower().strip()
+                if current_name == target_name:
+                    return Section(
+                        name=section.strip(),
+                        description=f"Section: {section.strip()}",
+                        order=len(self.sections),
+                        question_count=0,
+                        is_active=True,
+                        files=[],
+                    )
+            else:
+                current_name = (section.name or "").lower().strip()
+                if current_name == target_name:
                     return section
         return None
 
     def get_section_names(self) -> List[str]:
-        """Get list of section names (handles both string and Section object formats)"""
+        """Get list of section names (always returns strings)"""
         if not self.sections:
             return []
 
-        if isinstance(self.sections[0], str):
-            return self.sections
-        else:
-            return [section.name for section in self.sections]
+        names = []
+        for section in self.sections:
+            if isinstance(section, str):
+                names.append(section)
+            else:
+                names.append(section.name)
+        return names
 
     async def add_section(self, section: Section) -> bool:
         """Add a new section to the course"""
