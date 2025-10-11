@@ -16,17 +16,19 @@ from .models.study_material import StudyMaterial
 from .routers.auth import router as auth_router
 from .dependencies import get_current_user
 from .routers.admin import router as admin_router
-from .routers.courses import courses_router
+from .routers.courses.main import router as courses_router
 from .routers.tests import router as tests_router
 from .routers.contact import router as contact_router
 from .routers.materials import router as materials_router
 from .routers.analytics import router as analytics_router
 from .routers.exam_content import router as examcontent_router
-from .routers.payment import router as payment_router
 from .routers.enrollment import router as enrollment_router
-
-# Security
-security = HTTPBearer()
+from .routers.payment import router as payment_router
+from .middleware import (
+    SecurityHeadersMiddleware,
+    LoggingMiddleware,
+    ErrorHandlingMiddleware,
+)
 
 
 # Lifespan context manager for startup and shutdown events
@@ -55,7 +57,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 # Configure CORS
 origins = [
     "http://localhost:3000",  # Your local frontend
-    "http://localhost:5173",  # Vite dev server
     "https://pariksha-path2-0.vercel.app",  # Your production frontend
     "https://pariksha-path2-0-git-main-manavk.vercel.app",  # Vercel preview URLs
     "https://pariksha-path2-0-*.vercel.app",  # Wildcard for all Vercel preview URLs
@@ -66,8 +67,14 @@ app = FastAPI(
     description="Backend API for Pariksha Path",
     version="1.0.0",
     lifespan=lifespan,
+    # Security configurations
+    max_request_size=10 * 1024 * 1024,  # 10MB max request size
+    redoc_url="/docs",
+    docs_url="/docs",
+    openapi_url="/openapi.json",
 )
 
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -76,6 +83,10 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(ErrorHandlingMiddleware)
 
 
 @app.options("/{path:path}")

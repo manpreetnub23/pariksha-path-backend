@@ -1,4 +1,4 @@
-from fastapi import Request, HTTPException
+from fastapi import Request, HTTPException, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -10,6 +10,39 @@ from typing import Callable
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Middleware for adding security headers to all responses"""
+
+    async def dispatch(self, request: Request, call_next: Callable):
+        response = await call_next(request)
+
+        # Add security headers
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "font-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none';"
+        )
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), "
+            "payment=(), usb=(), bluetooth=()"
+        )
+
+        # Remove server information for security
+        if "Server" in response.headers:
+            del response.headers["Server"]
+
+        return response
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
@@ -38,7 +71,15 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         response.headers["X-Process-Time"] = str(process_time)
         print(f"Response Headers: {response.headers}")
         print(f"Response Status: {response.status_code}")
-        print(f"Response Body: {response.body}")
+
+        # Handle different response types for logging
+        try:
+            if hasattr(response, 'body') and response.body is not None:
+                print(f"Response Body: {response.body}")
+            else:
+                print("Response Body: [Streaming or empty response]")
+        except Exception as e:
+            print(f"Response Body: [Could not read body: {str(e)}]")
 
         return response
 
