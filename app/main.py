@@ -60,6 +60,7 @@ origins = [
     "https://pariksha-path2-0.vercel.app",  # Your production frontend
     "https://pariksha-path2-0-git-main-manavk.vercel.app",  # Vercel preview URLs
     "https://pariksha-path2-0-*.vercel.app",  # Wildcard for all Vercel preview URLs
+    "https://www.myparikshapath.in",  # Production domain
 ]
 
 app = FastAPI(
@@ -100,6 +101,7 @@ async def preflight_handler(request: Request, path: str):
         "http://localhost:3000",
         "http://localhost:5173",
         "https://pariksha-path2-0.vercel.app",
+        "https://www.myparikshapath.in",
     ]
 
     # Check if origin is in allowed list, otherwise default to None
