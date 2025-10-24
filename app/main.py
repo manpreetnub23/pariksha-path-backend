@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, status, Query, Request, Response
 from fastapi.security import HTTPBearer
 from datetime import datetime
+import logging
 
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -30,27 +31,41 @@ from .middleware import (
     ErrorHandlingMiddleware,
 )
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 
 # Lifespan context manager for startup and shutdown events
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Startup - Initialize database connection for serverless
-    print("⚡ Initializing database connection...")
+    logger.info("🚀 Starting up FastAPI application...")
+    logger.info("⚡ Initializing database connection...")
     try:
         # Initialize Beanie models - this is idempotent and serverless-safe
-        from .db import init_db
+        from .db import init_db, _db_name
 
         await init_db()
-        print("✅ Database initialized successfully")
+        logger.info("✅ Database initialized successfully")
+
+        # Log database connection details
+        if _db_name:
+            logger.info(f"📊 Connected to database: {_db_name}")
+        else:
+            logger.info("📊 Database name will be determined from URI")
+
     except Exception as e:
-        print(f"⚠️ Database initialization warning: {str(e)}")
+        logger.error(f"⚠️ Database initialization warning: {str(e)}")
         # Don't fail startup in serverless - let endpoints handle connection issues
 
+    logger.info("✅ FastAPI application startup complete")
     yield  # App runs here
 
     # Shutdown - In serverless, connections are automatically cleaned up
     # No need to explicitly close connections as they're per-request in serverless
-    print("✅ Serverless function completed")
+    logger.info("🔄 Shutting down FastAPI application...")
+    logger.info("✅ Serverless function completed")
 
 
 # Initialize FastAPI app with lifespan
@@ -126,15 +141,15 @@ async def preflight_handler(request: Request, path: str):
 @app.middleware("http")
 async def debug_cors_middleware(request: Request, call_next):
     # Log incoming request details
-    print(f"Incoming request: {request.method} {request.url}")
-    print(f"Origin header: {request.headers.get('origin')}")
-    print(f"Referer header: {request.headers.get('referer')}")
+    logger.info(f"Incoming request: {request.method} {request.url}")
+    logger.info(f"Origin header: {request.headers.get('origin')}")
+    logger.info(f"Referer header: {request.headers.get('referer')}")
 
     response = await call_next(request)
 
     # Log outgoing response headers
-    print(f"Response status: {response.status_code}")
-    print(f"CORS headers: {response.headers.get('access-control-allow-origin')}")
+    logger.info(f"Response status: {response.status_code}")
+    logger.info(f"CORS headers: {response.headers.get('access-control-allow-origin')}")
 
     return response
 
@@ -160,17 +175,17 @@ async def db_session_middleware(request: Request, call_next):
             try:
                 await client.admin.command("ping", serverSelectionTimeoutMS=1000)
             except Exception as e:
-                print(f"⚠️ DB ping check failed but continuing: {str(e)}")
+                logger.warning(f"⚠️ DB ping check failed but continuing: {str(e)}")
                 # Don't fail the request - let the endpoint handle DB errors
 
             # Log connection time for monitoring
             elapsed = (datetime.now() - start_time).total_seconds() * 1000
-            print(f"✓ DB connection ready in {elapsed:.2f}ms")
+            logger.info(f"✓ DB connection ready in {elapsed:.2f}ms")
 
         except Exception as e:
             # Log error but don't fail the request yet
             # Let the actual endpoint handle DB errors appropriately
-            print(f"❌ DB connection middleware error: {str(e)}")
+            logger.error(f"❌ DB connection middleware error: {str(e)}")
 
     # Continue with the request
     response = await call_next(request)
@@ -206,7 +221,9 @@ async def db_health_check():
     """Check MongoDB connection health - useful for diagnosing connection issues"""
     try:
         # Import here to avoid circular imports
-        from .db import get_db_client
+        from .db import get_db_client, _db_name
+        from .config import settings
+        from urllib.parse import urlparse
 
         # Get client and measure connection time
         start_time = datetime.now()
@@ -222,6 +239,15 @@ async def db_health_check():
         server_info = await client.admin.command("serverStatus")
         connection_info = server_info.get("connections", {})
 
+        # Get database name if not already cached
+        db_name = _db_name
+        if not db_name:
+            parsed = urlparse(settings.MONGO_URI)
+            db_name = parsed.path.lstrip("/") or "pariksha_path_db"
+
+        # Mask URI for security
+        masked_uri = settings.MONGO_URI.replace(parsed.password, "***") if parsed.password else settings.MONGO_URI
+
         return {
             "status": "connected",
             "timing": {
@@ -233,6 +259,10 @@ async def db_health_check():
                 "current": connection_info.get("current"),
                 "available": connection_info.get("available"),
                 "total_created": connection_info.get("totalCreated"),
+            },
+            "database": {
+                "name": db_name,
+                "uri": masked_uri,
             },
             "server_time": datetime.now().isoformat(),
         }
@@ -489,7 +519,9 @@ class UserUpdateRequest(BaseModel):
 async def db_status_check():
     """Check database and Beanie initialization status"""
     try:
-        from .db import _beanie_initialized, get_db_client
+        from .db import _beanie_initialized, get_db_client, _db_name
+        from .config import settings
+        from urllib.parse import urlparse
 
         # Check if Beanie is initialized
         beanie_status = "initialized" if _beanie_initialized else "not initialized"
@@ -502,10 +534,23 @@ async def db_status_check():
         # Test with a ping command
         await client.admin.command("ping")
 
+        # Get database name if not already cached
+        db_name = _db_name
+        if not db_name:
+            parsed = urlparse(settings.MONGO_URI)
+            db_name = parsed.path.lstrip("/") or "pariksha_path_db"
+
+        # Mask URI for security
+        masked_uri = settings.MONGO_URI.replace(parsed.password, "***") if parsed.password else settings.MONGO_URI
+
         return {
             "status": "healthy",
             "beanie": beanie_status,
             "ping_ms": round(ping_time, 2),
+            "database": {
+                "name": db_name,
+                "uri": masked_uri,
+            },
             "server_time": datetime.now().isoformat(),
         }
     except Exception as e:

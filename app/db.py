@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from typing import Optional
 import os
 import time
+import logging
 
 from pymongo.server_api import ServerApi
 from beanie import init_beanie
@@ -21,6 +22,10 @@ from .models.exam_content import ExamContent
 from .models.exam_category_structure import ExamCategoryStructure
 from .models.course_enrollment import CourseEnrollment
 from .models.contact import Contact
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Globals (one client + one beanie-init flag per process)
 _global_client: Optional[AsyncIOMotorClient] = None
@@ -67,29 +72,36 @@ async def get_db_client() -> motor.motor_asyncio.AsyncIOMotorClient:
     """
     global _global_client, _db_name
 
-    # Cache the database name
+    # Cache the database name and log it
     if _db_name is None:
         parsed = urlparse(settings.MONGO_URI)
         _db_name = parsed.path.lstrip("/") or "pariksha_path_db"
+
+        # Mask the URI for security but show the database name
+        masked_uri = settings.MONGO_URI.replace(parsed.password, "***") if parsed.password else settings.MONGO_URI
+        logger.info(f"🔗 Database URI configured: {masked_uri}")
+        logger.info(f"📊 Database name: {_db_name}")
 
     # Try to use existing connection if it's healthy
     if _global_client is not None:
         try:
             # Quick ping to check if connection is alive
             await _global_client.admin.command("ping", serverSelectionTimeoutMS=1000)
+            logger.info("✅ Using existing healthy database connection")
             return _global_client
         except Exception as e:
-            print(f"⚠️ Existing DB connection unhealthy: {str(e)}")
+            logger.warning(f"⚠️ Existing DB connection unhealthy: {str(e)}")
             # Don't close here, just create a new one
 
     # Create new connection
     try:
+        logger.info("🔄 Creating new database connection...")
         _global_client = await _make_client()
         await _global_client.admin.command("ping", serverSelectionTimeoutMS=2000)
-        print("✅ New DB connection established")
+        logger.info("✅ New database connection established successfully")
         return _global_client
     except Exception as e:
-        print(f"❌ Failed to establish DB connection: {str(e)}")
+        logger.error(f"❌ Failed to establish database connection: {str(e)}")
         raise
 
 
@@ -99,34 +111,37 @@ async def init_beanie_if_needed() -> None:
     This is the key function that prevents repeated initializations.
     """
     global _beanie_initialized, _init_in_progress, _last_init_time, _db_name
-    
+
     # Fast path - already initialized
     if _beanie_initialized:
+        logger.info("✅ Beanie already initialized, skipping")
         return
-    
+
     # Prevent multiple initializations
     if _init_in_progress:
         # Wait for initialization to complete
         while _init_in_progress:
             await asyncio.sleep(0.1)
         return
-    
+
     async with _beanie_lock:
         # Double-check after acquiring lock
         if _beanie_initialized:
             return
-        
+
         _init_in_progress = True
         try:
             start_time = time.time()
+            logger.info("🔄 Initializing Beanie models...")
             client = await get_db_client()
-            
+
             # Get database name - ensure it's available
             if _db_name is None:
                 parsed = urlparse(settings.MONGO_URI)
                 _db_name = parsed.path.lstrip("/") or "pariksha_path_db"
 
             db = client.get_database(_db_name)
+            logger.info(f"📊 Initializing Beanie with database: {_db_name}")
 
             # Register models with Beanie
             await init_beanie(
@@ -153,9 +168,9 @@ async def init_beanie_if_needed() -> None:
             _beanie_initialized = True
             _last_init_time = time.time()
             elapsed = time.time() - start_time
-            print(f"✅ Beanie models initialized successfully in {elapsed:.2f}s")
+            logger.info(f"✅ Beanie models initialized successfully in {elapsed:.2f}s")
         except Exception as e:
-            print(f"❌ Beanie initialization failed: {str(e)}")
+            logger.error(f"❌ Beanie initialization failed: {str(e)}")
             raise
         finally:
             _init_in_progress = False
@@ -177,10 +192,10 @@ async def get_db_client_with_retry(max_retries: int = 2) -> motor.motor_asyncio.
             return await get_db_client()
         except Exception as e:
             if attempt == max_retries:
-                print(f"❌ All DB connection attempts failed after {max_retries + 1} tries")
+                logger.error(f"❌ All DB connection attempts failed after {max_retries + 1} tries")
                 raise e
 
-            print(f"⚠️ DB connection attempt {attempt + 1} failed: {str(e)}")
+            logger.warning(f"⚠️ DB connection attempt {attempt + 1} failed: {str(e)}")
             # Brief delay before retry
             await asyncio.sleep(0.1 * (attempt + 1))
 
@@ -196,8 +211,9 @@ def close_client() -> None:
     try:
         if _global_client is not None:
             _global_client.close()
-    except Exception:
-        pass
+            logger.info("✅ Database connection closed")
+    except Exception as e:
+        logger.warning(f"⚠️ Error closing database connection: {str(e)}")
     _global_client = None
     _beanie_initialized = False
     _db_name = None

@@ -38,7 +38,6 @@ async def create_order(
     current_user: User = Depends(get_current_user),  # 👈 same as other routes
 ):
     try:
-        print(current_user)
         order = razorpay_client.order.create(
             {
                 "amount": request.amount,
@@ -49,7 +48,6 @@ async def create_order(
                 "payment_capture": 1,
             }
         )
-        print("heelo gurrakha")
         return order
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
