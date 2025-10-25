@@ -32,7 +32,9 @@ from .middleware import (
 )
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -69,14 +71,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 # Initialize FastAPI app with lifespan
-# Configure CORS
-origins = [
-    "http://localhost:3000",  # Your local frontend
-    "https://pariksha-path2-0.vercel.app",  # Your production frontend
-    "https://pariksha-path2-0-git-main-manavk.vercel.app",  # Vercel preview URLs
-    "https://pariksha-path2-0-*.vercel.app",  # Wildcard for all Vercel preview URLs
-    "https://www.myparikshapath.in",  # Production domain
-]
 
 app = FastAPI(
     title="My Parikshapath API",
@@ -93,7 +87,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Allow all origins
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -111,47 +105,18 @@ async def preflight_handler(request: Request, path: str):
     Handle preflight OPTIONS requests for CORS
     """
     origin = request.headers.get("origin")
-    # Only allow origins that are in our configured list
-    allowed_origins = [
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://pariksha-path2-0.vercel.app",
-        "https://www.myparikshapath.in",
-    ]
-
-    # Check if origin is in allowed list, otherwise default to None
-    cors_origin = origin if origin in allowed_origins else None
 
     headers = {
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "*",
         "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Origin": "*",  # Allow all origins
     }
-
-    # Only set origin if it's in our allowed list
-    if cors_origin:
-        headers["Access-Control-Allow-Origin"] = cors_origin
 
     return Response(
         status_code=200,
         headers=headers,
     )
-
-
-@app.middleware("http")
-async def debug_cors_middleware(request: Request, call_next):
-    # Log incoming request details
-    logger.info(f"Incoming request: {request.method} {request.url}")
-    logger.info(f"Origin header: {request.headers.get('origin')}")
-    logger.info(f"Referer header: {request.headers.get('referer')}")
-
-    response = await call_next(request)
-
-    # Log outgoing response headers
-    logger.info(f"Response status: {response.status_code}")
-    logger.info(f"CORS headers: {response.headers.get('access-control-allow-origin')}")
-
-    return response
 
 
 # Enhanced middleware for serverless environments to ensure database connectivity
@@ -246,7 +211,11 @@ async def db_health_check():
             db_name = parsed.path.lstrip("/") or "pariksha_path_db"
 
         # Mask URI for security
-        masked_uri = settings.MONGO_URI.replace(parsed.password, "***") if parsed.password else settings.MONGO_URI
+        masked_uri = (
+            settings.MONGO_URI.replace(parsed.password, "***")
+            if parsed.password
+            else settings.MONGO_URI
+        )
 
         return {
             "status": "connected",
@@ -273,111 +242,6 @@ async def db_health_check():
             "error_type": type(e).__name__,
             "server_time": datetime.now().isoformat(),
         }
-
-        # # API Routes Groups
-        # @app.get("/api/v1/test")
-        # async def test_endpoint():
-        #     return {"message": "API v1 is working!"}
-
-        # # Course routes - Protected
-        # @app.get("/api/v1/courses")
-        # async def get_courses(
-        #     category: Optional[ExamCategory] = Query(
-        #         None, description="Filter by exam category"
-        #     ),
-        #     search: Optional[str] = Query(None, description="Search in title and description"),
-        #     is_free: Optional[bool] = Query(None, description="Filter by free courses"),
-        #     sort_by: str = Query("priority_order", description="Field to sort by"),
-        #     sort_order: str = Query("asc", description="Sort order (asc or desc)"),
-        #     page: int = Query(1, description="Page number", ge=1),
-        #     limit: int = Query(10, description="Items per page", ge=1, le=100),
-        #     current_user: User = Depends(get_current_user),
-        # ):
-        #     """Get all available courses with filtering and pagination"""
-        #     try:
-
-        #         query_filters = {"is_active": True}
-
-        #         if category:
-        #             query_filters["category"] = category
-
-        #         if is_free is not None:
-        #             query_filters["is_free"] = is_free
-
-        #         if search:
-        #             query_filters["$or"] = [
-        #                 {"title": {"$regex": search, "$options": "i"}},
-        #                 {"description": {"$regex": search, "$options": "i"}},
-        #             ]
-
-        #         skip = (page - 1) * limit
-
-        #         sort_direction = 1 if sort_order == "asc" else -1
-
-        #         try:
-        #             courses = (
-        #                 await Course.find(query_filters)
-        #                 .sort([(sort_by, sort_direction)])
-        #                 .skip(skip)
-        #                 .limit(limit)
-        #                 .to_list()
-        #             )
-
-        #             total_courses = await Course.find(query_filters).count()
-        #             total_pages = (total_courses + limit - 1) // limit
-
-        #             course_list = []
-
-        #             for course in courses:
-        #                 try:
-        #                     course_data = {
-        #                         "id": str(course.id),
-        #                         "title": course.title,
-        #                         "code": course.code,
-        #                         "category": course.category.value,
-        #                         "sub_category": course.sub_category,
-        #                         "description": course.description,
-        #                         "sections": getattr(course, "sections", []),
-        #                         "price": course.price,
-        #                         "is_free": course.is_free,
-        #                         "discount_percent": course.discount_percent,
-        #                         "thumbnail_url": course.thumbnail_url,
-        #                         "material_count": len(getattr(course, "material_ids", [])),
-        #                         "test_series_count": len(
-        #                             getattr(course, "test_series_ids", [])
-        #                         ),
-        #                         "enrolled_students_count": getattr(
-        #                             course, "enrolled_students_count", 0
-        #                         ),
-        #                     }
-        #                     course_list.append(course_data)
-        #                 except Exception as e:
-
-        #                     import traceback
-
-        #             return {
-        #                 "message": "Courses retrieved successfully",
-        #                 "courses": course_list,
-        #                 "pagination": {
-        #                     "total": total_courses,
-        #                     "page": page,
-        #                     "limit": limit,
-        #                     "total_pages": total_pages,
-        #                 },
-        #             }
-
-        #         except Exception as e:
-        #             import traceback
-
-        #             raise
-
-        #     except Exception as e:
-        import traceback
-
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve courses: {str(e)}",
-        )
 
 
 @app.get("/api/v1/admin/dashboard")
@@ -541,7 +405,11 @@ async def db_status_check():
             db_name = parsed.path.lstrip("/") or "pariksha_path_db"
 
         # Mask URI for security
-        masked_uri = settings.MONGO_URI.replace(parsed.password, "***") if parsed.password else settings.MONGO_URI
+        masked_uri = (
+            settings.MONGO_URI.replace(parsed.password, "***")
+            if parsed.password
+            else settings.MONGO_URI
+        )
 
         return {
             "status": "healthy",
