@@ -21,6 +21,7 @@ class CourseCreateRequest(BaseModel):
     is_free: bool = False
     discount_percent: Optional[float] = None
     validity_period_days: int = 365  # Number of days course access is valid after enrollment
+    mock_test_timer_seconds: int = 3600  # Timer duration in seconds for mock tests (default 1 hour)
     material_ids: List[str] = []
     test_series_ids: List[str] = []
     thumbnail_url: str
@@ -66,6 +67,7 @@ class CourseUpdateRequest(BaseModel):
     material_ids: Optional[List[str]] = None
     test_series_ids: Optional[List[str]] = None
     validity_period_days: Optional[int] = None  # Number of days course access is valid after enrollment
+    mock_test_timer_seconds: Optional[int] = None  # Timer duration in seconds for mock tests
     thumbnail_url: Optional[str] = None
     icon_url: Optional[str] = None
     priority_order: Optional[int] = None
@@ -105,6 +107,7 @@ class CourseResponse(BaseModel):
     is_free: bool
     discount_percent: Optional[float] = None
     validity_period_days: int  # Number of days course access is valid after enrollment
+    mock_test_timer_seconds: int  # Timer duration in seconds for mock tests
     material_ids: List[str]
     test_series_ids: List[str]
     enrolled_students_count: int

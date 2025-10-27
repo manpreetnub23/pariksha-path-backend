@@ -69,6 +69,11 @@ class Course(Document):
         365  # Number of days course access is valid after enrollment
     )
 
+    # Mock test timer (in seconds)
+    mock_test_timer_seconds: int = (
+        3600  # Default 1 hour (3600 seconds) for mock tests
+    )
+
     @field_validator("sections", mode="before")
     def convert_string_sections_to_objects(cls, v):
         """Convert string sections to Section objects during migration"""

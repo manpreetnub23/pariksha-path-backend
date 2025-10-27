@@ -61,6 +61,7 @@ class CourseService:
             is_free=course_data["is_free"],
             discount_percent=course_data.get("discount_percent"),
             validity_period_days=course_data.get("validity_period_days", 365),
+            mock_test_timer_seconds=course_data.get("mock_test_timer_seconds", 3600),
             material_ids=course_data.get("material_ids", []),
             test_series_ids=course_data.get("test_series_ids", []),
             thumbnail_url=course_data["thumbnail_url"],
@@ -183,12 +184,8 @@ class CourseService:
                 "thumbnail_url": course.thumbnail_url,
                 "icon_url": getattr(course, "icon_url", None),
                 "banner_url": getattr(course, "banner_url", None),
-                "tagline": getattr(course, "tagline", None),
-                "enrolled_students_count": getattr(
-                    course, "enrolled_students_count", 0
-                ),
-                "is_active": course.is_active,
-                "created_at": course.created_at,
+                "mock_test_timer_seconds": getattr(course, "mock_test_timer_seconds", 3600),
+                "material_ids": course.material_ids,
             }
             course_responses.append(course_data)
 
@@ -235,6 +232,7 @@ class CourseService:
                 "is_free": course.is_free,
                 "discount_percent": course.discount_percent,
                 "validity_period_days": getattr(course, "validity_period_days", 365),
+                "mock_test_timer_seconds": getattr(course, "mock_test_timer_seconds", 3600),
                 "material_ids": course.material_ids,
                 "test_series_ids": course.test_series_ids,
                 "thumbnail_url": course.thumbnail_url,

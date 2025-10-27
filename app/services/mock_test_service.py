@@ -82,6 +82,13 @@ class MockTestService:
         if not course:
             raise ValueError("Course not found")
 
+        # Validate that time spent doesn't exceed course timer limit
+        max_time_seconds = course.mock_test_timer_seconds
+        if time_spent_seconds > max_time_seconds:
+            print(f"WARNING: Reported time spent ({time_spent_seconds}s) exceeds course timer limit ({max_time_seconds}s)")
+            # Cap the time spent to the course limit
+            time_spent_seconds = max_time_seconds
+
         # Collect question IDs
         question_ids: List[str] = [
             a["question_id"] for a in answers if a.get("question_id")
