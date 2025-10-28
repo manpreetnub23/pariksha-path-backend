@@ -186,6 +186,9 @@ class CourseService:
                 "banner_url": getattr(course, "banner_url", None),
                 "mock_test_timer_seconds": getattr(course, "mock_test_timer_seconds", 3600),
                 "material_ids": course.material_ids,
+                "is_active": course.is_active,
+                "created_at": course.created_at,
+                "updated_at": course.updated_at,
             }
             course_responses.append(course_data)
 
