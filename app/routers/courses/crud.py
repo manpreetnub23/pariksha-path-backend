@@ -229,6 +229,27 @@ async def enroll_in_course(
         )
 
 
+@router.get(
+    "/summary",
+    response_model=Dict[str, Any],
+    summary="Get course summary statistics",
+    description="Admin endpoint to retrieve aggregate course statistics",
+)
+async def get_course_summary(current_user: User = Depends(admin_required)):
+    """Return aggregated statistics for admin dashboards."""
+    try:
+        stats = await CourseService.get_course_statistics()
+        return {
+            "message": "Course summary retrieved successfully",
+            "data": stats,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve course summary: {str(e)}",
+        )
+
+
 @router.put(
     "/{course_id}/toggle-visibility",
     response_model=Dict[str, Any],
@@ -251,6 +272,7 @@ async def toggle_course_visibility(
 
         # Toggle visibility
         course.is_active = not course.is_active
+        course.update_timestamp()
         await course.save()
 
         return {

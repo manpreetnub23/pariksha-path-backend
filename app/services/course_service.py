@@ -204,6 +204,34 @@ class CourseService:
         }
 
     @staticmethod
+    async def get_course_statistics() -> Dict[str, Any]:
+        """Aggregate course statistics for admin dashboards."""
+
+        total_courses = await Course.find({}).count()
+        active_courses = await Course.find({"is_active": True}).count()
+        inactive_courses = total_courses - active_courses
+
+        latest_course = (
+            await Course.find({})
+            .sort("-updated_at")
+            .limit(1)
+            .to_list()
+        )
+
+        last_updated_at = (
+            latest_course[0].updated_at.isoformat()
+            if latest_course and latest_course[0].updated_at
+            else None
+        )
+
+        return {
+            "total": total_courses,
+            "active": active_courses,
+            "inactive": max(inactive_courses, 0),
+            "last_updated_at": last_updated_at,
+        }
+
+    @staticmethod
     async def get_course(course_id: str) -> Dict[str, Any]:
         """
         Get course details by ID
@@ -305,7 +333,7 @@ class CourseService:
     @staticmethod
     async def delete_course(course_id: str, current_user: User) -> Dict[str, Any]:
         """
-        Delete (deactivate) a course
+        Delete a course and cascade removal to related content
 
         Args:
             course_id: Course ID
@@ -318,17 +346,28 @@ class CourseService:
         if not course:
             raise ValueError("Course not found")
 
-        # Check if course is already inactive
-        if not course.is_active:
-            return {
-                "message": "Course is already deactivated",
-                "course_id": course_id,
-            }
+        # Track counts before deletion
+        section_names = course.get_section_names()
+        section_count = len(section_names)
 
-        # Soft delete by setting is_active=False
-        course.is_active = False
-        course.update_timestamp()
-        await course.save()
+        # Delete all questions associated with the course
+        question_delete_result = await Question.find({"course_id": course_id}).delete_many()
+        deleted_questions = getattr(
+            question_delete_result,
+            "deleted_count",
+            getattr(question_delete_result, "n", 0),
+        )
+
+        # Delete enrollments referencing this course
+        enrollment_delete_result = await CourseEnrollment.find({"course_id": course_id}).delete_many()
+        deleted_enrollments = getattr(
+            enrollment_delete_result,
+            "deleted_count",
+            getattr(enrollment_delete_result, "n", 0),
+        )
+
+        # Remove the course document itself (hard delete)
+        await course.delete()
 
         # Log admin action
         await AdminService.log_admin_action(
@@ -336,12 +375,20 @@ class CourseService:
             ActionType.DELETE,
             "courses",
             course_id,
-            {"is_active": False},
+            {
+                "action": "course_deleted",
+                "deleted_sections": section_count,
+                "deleted_questions": deleted_questions,
+                "deleted_enrollments": deleted_enrollments,
+            },
         )
 
         return {
-            "message": "Course deactivated successfully",
+            "message": "Course and related content deleted successfully",
             "course_id": course_id,
+            "deleted_sections": section_count,
+            "deleted_questions": deleted_questions,
+            "deleted_enrollments": deleted_enrollments,
         }
 
     @staticmethod
