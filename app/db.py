@@ -80,7 +80,6 @@ async def get_db_client() -> motor.motor_asyncio.AsyncIOMotorClient:
         # Mask the URI for security but show the database name
         masked_uri = settings.MONGO_URI.replace(parsed.password, "***") if parsed.password else settings.MONGO_URI
         logger.info(f"🔗 Database URI configured: {masked_uri}")
-        logger.info(f"📊 Database name: {_db_name}")
 
     # Try to use existing connection if it's healthy
     if _global_client is not None:

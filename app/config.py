@@ -40,16 +40,4 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
 
-# Log settings loading (redact sensitive values)
 settings = Settings()
-logger.info(f"[CONFIG] Settings loaded successfully")
-logger.info(f"[CONFIG] Mongo URI: {settings.MONGO_URI[:10]}**** (redacted)")
-logger.info(f"[CONFIG] JWT Secret: {settings.JWT_SECRET_KEY[:10]}**** (redacted)")
-logger.info(f"[CONFIG] Razorpay Key ID: {settings.RAZORPAY_KEY_ID[:8]}**** (redacted)")
-key_type = "TEST" if settings.RAZORPAY_KEY_ID.startswith("rzp_test_") else "LIVE" if settings.RAZORPAY_KEY_ID.startswith("rzp_live_") else "UNKNOWN"
-logger.info(f"[CONFIG] Using Razorpay {key_type} keys")
-logger.info(f"[CONFIG] Login OTP Required: {settings.LOGIN_OTP_REQUIRED}")
-logger.info(f"[CONFIG] DO Spaces Endpoint: {settings.DO_SPACES_ENDPOINT}")
-logger.info(f"[CONFIG] DO Spaces Bucket: {settings.DO_SPACES_BUCKET}")
-logger.info(f"[CONFIG] SMTP Server: {settings.SMTP_SERVER}")
-logger.info(f"[CONFIG] Sender Email: {settings.SENDER_EMAIL if settings.SENDER_EMAIL else 'None'}")

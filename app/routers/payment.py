@@ -17,10 +17,6 @@ router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 RAZORPAY_KEY_ID = settings.RAZORPAY_KEY_ID
 RAZORPAY_KEY_SECRET = settings.RAZORPAY_KEY_SECRET
 
-# Determine if using test or live keys (for logging only)
-key_type = "TEST" if RAZORPAY_KEY_ID.startswith("rzp_test_") else "LIVE" if RAZORPAY_KEY_ID.startswith("rzp_live_") else "UNKNOWN"
-logger.info(f"[PAYMENT INIT] Using Razorpay {key_type} keys - Key ID: {RAZORPAY_KEY_ID[:8]}****")
-
 # Razorpay client
 razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
