@@ -163,6 +163,15 @@ async def get_mock_attempt_details(
                             "id": str(question.id),
                             "title": question.title,
                             "question_text": question.question_text,
+                            "question_type": getattr(
+                                question.question_type, "value", str(question.question_type)
+                            ),
+                            "difficulty_level": getattr(
+                                question.difficulty_level,
+                                "value",
+                                str(question.difficulty_level),
+                            ),
+                            "section": getattr(question, "section", None),
                             "options": [
                                 {
                                     "text": opt.text,
@@ -175,10 +184,22 @@ async def get_mock_attempt_details(
                                 )
                             ],
                             "explanation": question.explanation,
+                            "remarks": getattr(question, "remarks", None),
                             "subject": question.subject,
                             "topic": question.topic,
-                            "difficulty_level": question.difficulty_level,
+                            "tags": getattr(question, "tags", []),
+                            "marks": getattr(question, "marks", 1.0),
                             "question_image_urls": question.question_image_urls,
+                            "explanation_image_urls": getattr(
+                                question, "explanation_image_urls", []
+                            ),
+                            "remarks_image_urls": getattr(
+                                question, "remarks_image_urls", []
+                            ),
+                            "created_at": getattr(question, "created_at", None),
+                            "updated_at": getattr(question, "updated_at", None),
+                            "is_active": getattr(question, "is_active", True),
+                            "created_by": getattr(question, "created_by", None),
                         },
                     }
                 )
