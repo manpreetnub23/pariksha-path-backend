@@ -111,6 +111,18 @@ class QuestionService:
                 except (ValueError, TypeError):
                     raise ValueError(f"Invalid marks value: {row.get('marks', 'N/A')}")
 
+                # Extract optional negative marks (deduction on incorrect answers)
+                negative_deduction = 0.0
+                if "negative_marks" in df.columns and not pd.isna(row.get("negative_marks")):
+                    try:
+                        negative_deduction = float(row.get("negative_marks", 0))
+                        if negative_deduction < 0:
+                            raise ValueError("negative_marks must be a non-negative number")
+                    except (ValueError, TypeError):
+                        raise ValueError(
+                            f"Invalid negative_marks value: {row.get('negative_marks', 'N/A')}"
+                        )
+
                 # Process options
                 options = []
                 for i, opt in enumerate(["A", "B", "C", "D"]):
@@ -143,6 +155,14 @@ class QuestionService:
                     tags=[exam_category.value, exam_subcategory, subject],
                     is_active=True,
                 )
+
+                # Store negative marking info in metadata for downstream scoring
+                # Note: value is a positive deduction amount to subtract on incorrect
+                try:
+                    question.metadata = getattr(question, "metadata", {}) or {}
+                except Exception:
+                    question.metadata = {}
+                question.metadata["negative_marks"] = negative_deduction
 
                 # Insert question into database
                 await question.insert()

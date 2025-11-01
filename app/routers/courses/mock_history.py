@@ -57,7 +57,10 @@ async def get_mock_history(
                     "score": attempt.score,
                     "max_score": attempt.max_score,
                     "percentage": (
-                        round((attempt.score / attempt.max_score) * 100, 2)
+                        max(
+                            0.0,
+                            round((attempt.score / attempt.max_score) * 100, 2),
+                        )
                         if attempt.max_score > 0
                         else 0
                     ),
@@ -211,7 +214,7 @@ async def get_mock_attempt_details(
             "score": attempt.score,
             "max_score": attempt.max_score,
             "percentage": (
-                round((attempt.score / attempt.max_score) * 100, 2)
+                max(0.0, round((attempt.score / attempt.max_score) * 100, 2))
                 if attempt.max_score > 0
                 else 0
             ),

@@ -120,9 +120,20 @@ class MockTestService:
         correct = 0
         per_section: Dict[str, Dict[str, int]] = {}
         question_results: List[Dict[str, Any]] = []
+        total_negative_deductions: float = 0.0
+        total_marks_available: float = 0.0
+        score_total: float = 0.0
 
         for qid, q in question_by_id.items():
             ans = answer_by_qid.get(qid)
+            # Per-question marks available
+            q_marks = 0.0
+            try:
+                q_marks = float(getattr(q, "marks", 1.0) or 1.0)
+            except Exception:
+                q_marks = 1.0
+            total_marks_available += q_marks
+
             if not ans:
                 # unanswered
                 section_name = getattr(q, "section", "General") or "General"
@@ -140,6 +151,9 @@ class MockTestService:
                         "correct_option_order": next(
                             (o.order for o in q.options if o.is_correct), None
                         ),
+                        "negative_deduction": 0.0,
+                        "marks_available": q_marks,
+                        "marks_awarded": 0.0,
                     }
                 )
                 continue
@@ -197,6 +211,22 @@ class MockTestService:
             if is_correct:
                 correct += 1
                 per_section[section_name]["correct"] += 1
+                score_total += q_marks
+
+            # Determine negative deduction for incorrect attempted questions
+            neg_val = 0.0
+            if not is_correct and selected_order is not None:
+                try:
+                    meta = getattr(q, "metadata", {}) or {}
+                    raw = meta.get("negative_marks", 0)
+                    neg = float(raw) if raw is not None else 0.0
+                    if neg < 0:
+                        neg = 0.0
+                    neg_val = neg
+                except Exception:
+                    neg_val = 0.0
+                total_negative_deductions += neg_val
+                score_total -= neg_val
 
             question_results.append(
                 {
@@ -206,11 +236,14 @@ class MockTestService:
                     "is_correct": is_correct,
                     "selected_option_order": selected_order,
                     "correct_option_order": correct_order,
+                    "negative_deduction": neg_val,
+                    "marks_available": q_marks,
+                    "marks_awarded": (q_marks if is_correct else 0.0),
                 }
             )
 
-        max_score = total_questions  # 1 mark per question for mock
-        score = correct
+        max_score = float(total_marks_available)  # sum of marks per question
+        score = float(score_total)  # may be negative
         accuracy = (correct / attempted) if attempted > 0 else 0.0
 
         print(f"DEBUG: Final stats - total_questions={total_questions}, attempted={attempted}, correct={correct}, score={score}, max_score={max_score}, accuracy={accuracy}")
@@ -248,9 +281,9 @@ class MockTestService:
                     if qr["is_correct"]
                     else "incorrect" if qr["attempted"] else "skipped"
                 ),
-                marks_awarded=1 if qr["is_correct"] else 0,
-                marks_available=1.0,  # 1 mark per question for mock
-                negative_marks=0,  # No negative marking in mock tests
+                marks_awarded=float(qr.get("marks_awarded", 0.0)),
+                marks_available=float(qr.get("marks_available", 1.0)),
+                negative_marks=float(qr.get("negative_deduction", 0.0)),
                 time_spent_seconds=0,  # We don't track per-question time
             )
             question_attempts.append(question_attempt)
@@ -307,11 +340,12 @@ class MockTestService:
                 "score": score,
                 "max_score": max_score,
                 "percentage": (
-                    round((score / max_score) * 100, 2) if max_score > 0 else 0
+                    max(0.0, round((score / max_score) * 100, 2)) if max_score > 0 else 0
                 ),
                 "accuracy": round(accuracy, 4),
                 "section_summaries": section_summaries,
                 "question_results": question_results,
+                "negative_deductions": round(float(total_negative_deductions), 4),
                 "attempt_id": str(test_attempt.id),
             },
         }

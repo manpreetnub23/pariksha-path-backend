@@ -96,6 +96,26 @@ class CourseQuestionService:
                     tags=[],
                     created_by=str(current_user.id),
                 )
+
+                # Optional negative marks (positive number indicating deduction on incorrect)
+                negative_raw = row.get("negative_marks")
+                try:
+                    if negative_raw is not None and str(negative_raw).strip() != "":
+                        negative_val = float(str(negative_raw).strip())
+                        if negative_val < 0:
+                            raise ValueError("negative_marks must be non-negative")
+                    else:
+                        negative_val = 0.0
+                except Exception:
+                    raise ValueError(f"Invalid negative_marks value: {negative_raw}")
+
+                # Persist in metadata for downstream scoring
+                try:
+                    question.metadata = getattr(question, "metadata", {}) or {}
+                except Exception:
+                    question.metadata = {}
+                question.metadata["negative_marks"] = negative_val
+
                 questions.append(question)
             except Exception as e:
                 print(f"Error processing row: {row}. Error: {str(e)}")
