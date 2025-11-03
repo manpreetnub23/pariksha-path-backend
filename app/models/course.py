@@ -223,7 +223,6 @@ class Course(Document):
     test_series_ids: List[str] = []  # References to associated test series
 
     # Display info
-    thumbnail_url: str
     icon_url: Optional[str] = None
     priority_order: int = 0  # For display ordering on frontend
     banner_url: Optional[str] = None  # Hero banner image

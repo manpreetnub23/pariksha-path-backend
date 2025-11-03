@@ -142,7 +142,6 @@ class TestSeries(BaseDocument):
     price: Optional[float] = None  # If individually purchasable
 
     # Display info
-    thumbnail_url: Optional[str] = None
     instructions: Optional[str] = None
 
     # Default interface configuration

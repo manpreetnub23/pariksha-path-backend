@@ -7,8 +7,8 @@ from datetime import datetime, timedelta
 from bson import ObjectId
 
 from ..models.course import Course, Section
-from ..models.question import Question, QuestionType, DifficultyLevel, QuestionOption
-from ..models.admin_action import AdminAction, ActionType
+from ..models.question import Question
+from ..models.admin_action import ActionType
 from ..models.user import User
 from ..models.course_enrollment import CourseEnrollment
 from ..models.enums import ExamCategory
@@ -64,7 +64,6 @@ class CourseService:
             mock_test_timer_seconds=course_data.get("mock_test_timer_seconds", 3600),
             material_ids=course_data.get("material_ids", []),
             test_series_ids=course_data.get("test_series_ids", []),
-            thumbnail_url=course_data["thumbnail_url"],
             icon_url=course_data.get("icon_url"),
             priority_order=course_data.get("priority_order", 0),
             banner_url=course_data.get("banner_url"),
@@ -149,9 +148,13 @@ class CourseService:
 
         # Set sort order with secondary sort for consistent category ordering across auth states
         sort_direction = 1 if sort_order == "asc" else -1
-        
+
         # Primary sort by priority_order, secondary sort by category for consistent ordering
-        sort_criteria = [("priority_order", sort_direction), ("category", 1), ("title", 1)]
+        sort_criteria = [
+            ("priority_order", sort_direction),
+            ("category", 1),
+            ("title", 1),
+        ]
 
         # Fetch courses with improved sorting for consistent category ordering
         courses = (
@@ -181,10 +184,11 @@ class CourseService:
                 "is_free": course.is_free,
                 "discount_percent": course.discount_percent,
                 "validity_period_days": getattr(course, "validity_period_days", 365),
-                "thumbnail_url": course.thumbnail_url,
                 "icon_url": getattr(course, "icon_url", None),
                 "banner_url": getattr(course, "banner_url", None),
-                "mock_test_timer_seconds": getattr(course, "mock_test_timer_seconds", 3600),
+                "mock_test_timer_seconds": getattr(
+                    course, "mock_test_timer_seconds", 3600
+                ),
                 "material_ids": course.material_ids,
                 "is_active": course.is_active,
                 "created_at": course.created_at,
@@ -211,12 +215,7 @@ class CourseService:
         active_courses = await Course.find({"is_active": True}).count()
         inactive_courses = total_courses - active_courses
 
-        latest_course = (
-            await Course.find({})
-            .sort("-updated_at")
-            .limit(1)
-            .to_list()
-        )
+        latest_course = await Course.find({}).sort("-updated_at").limit(1).to_list()
 
         last_updated_at = (
             latest_course[0].updated_at.isoformat()
@@ -263,10 +262,11 @@ class CourseService:
                 "is_free": course.is_free,
                 "discount_percent": course.discount_percent,
                 "validity_period_days": getattr(course, "validity_period_days", 365),
-                "mock_test_timer_seconds": getattr(course, "mock_test_timer_seconds", 3600),
+                "mock_test_timer_seconds": getattr(
+                    course, "mock_test_timer_seconds", 3600
+                ),
                 "material_ids": course.material_ids,
                 "test_series_ids": course.test_series_ids,
-                "thumbnail_url": course.thumbnail_url,
                 "icon_url": course.icon_url,
                 "banner_url": course.banner_url,
                 "tagline": course.tagline,
@@ -351,7 +351,9 @@ class CourseService:
         section_count = len(section_names)
 
         # Delete all questions associated with the course
-        question_delete_result = await Question.find({"course_id": course_id}).delete_many()
+        question_delete_result = await Question.find(
+            {"course_id": course_id}
+        ).delete_many()
         deleted_questions = getattr(
             question_delete_result,
             "deleted_count",
@@ -359,7 +361,9 @@ class CourseService:
         )
 
         # Delete enrollments referencing this course
-        enrollment_delete_result = await CourseEnrollment.find({"course_id": course_id}).delete_many()
+        enrollment_delete_result = await CourseEnrollment.find(
+            {"course_id": course_id}
+        ).delete_many()
         deleted_enrollments = getattr(
             enrollment_delete_result,
             "deleted_count",
@@ -552,7 +556,6 @@ class CourseService:
                     "sub_category": course.sub_category,
                     "description": course.description,
                     "sections": sections_list,
-                    "thumbnail_url": course.thumbnail_url,
                     "icon_url": course.icon_url,
                     "material_ids": course.material_ids,
                     "test_series_ids": course.test_series_ids,

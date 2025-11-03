@@ -38,7 +38,6 @@ class StudyMaterialCreate(BaseModel):
     file_url: HttpUrl
     file_size_kb: int = 0
     preview_url: Optional[HttpUrl] = None
-    thumbnail_url: Optional[HttpUrl] = None
     access_type: MaterialAccessType = MaterialAccessType.PREMIUM
     exam_category: str
     exam_subcategory: Optional[str] = None
@@ -57,7 +56,6 @@ class StudyMaterialCreate(BaseModel):
                 "category": "formula_sheet",
                 "file_url": "https://storage.example.com/files/jee-physics-formulas.pdf",
                 "file_size_kb": 1024,
-                "thumbnail_url": "https://storage.example.com/thumbnails/jee-physics-formulas.jpg",
                 "access_type": "premium",
                 "exam_category": "engineering",
                 "exam_subcategory": "JEE Main",
@@ -78,7 +76,6 @@ class StudyMaterialUpdate(BaseModel):
     file_url: Optional[HttpUrl] = None
     file_size_kb: Optional[int] = None
     preview_url: Optional[HttpUrl] = None
-    thumbnail_url: Optional[HttpUrl] = None
     access_type: Optional[MaterialAccessType] = None
     exam_category: Optional[str] = None
     exam_subcategory: Optional[str] = None
@@ -191,7 +188,6 @@ async def list_materials(
                 "description": material.description,
                 "format": material.format,
                 "category": material.category,
-                "thumbnail_url": material.thumbnail_url,
                 "exam_category": material.exam_category,
                 "exam_subcategory": material.exam_subcategory,
                 "subject": material.subject,
@@ -318,7 +314,6 @@ async def get_material(
             "file_url": material.file_url,
             "file_size_kb": material.file_size_kb,
             "preview_url": material.preview_url,
-            "thumbnail_url": material.thumbnail_url,
             "exam_category": material.exam_category,
             "exam_subcategory": material.exam_subcategory,
             "subject": material.subject,
@@ -550,11 +545,6 @@ async def create_material(
             file_size_kb=material_data.file_size_kb,
             preview_url=(
                 str(material_data.preview_url) if material_data.preview_url else None
-            ),
-            thumbnail_url=(
-                str(material_data.thumbnail_url)
-                if material_data.thumbnail_url
-                else None
             ),
             access_type=material_data.access_type,
             exam_category=material_data.exam_category,

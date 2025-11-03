@@ -57,7 +57,6 @@ async def seed_exams_from_json():
                             "description": f"{exam} in {category}",
                             "price": 0.0,
                             "is_free": True,
-                            "thumbnail_url": "",
                             "created_by": "system_seed",
                             "is_active": True,
                         })

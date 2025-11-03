@@ -129,6 +129,27 @@ async def get_enrolled_courses(current_user: User = Depends(get_current_user)):
 
 
 @router.get(
+    "/summary",
+    response_model=Dict[str, Any],
+    summary="Get course summary statistics",
+    description="Admin endpoint to retrieve aggregate course statistics",
+)
+async def get_course_summary(current_user: User = Depends(admin_required)):
+    """Return aggregated statistics for admin dashboards."""
+    try:
+        stats = await CourseService.get_course_statistics()
+        return {
+            "message": "Course summary retrieved successfully",
+            "data": stats,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve course summary: {str(e)}",
+        )
+
+
+@router.get(
     "/{course_id}",
     response_model=Dict[str, Any],
     summary="Get course details",
@@ -226,27 +247,6 @@ async def enroll_in_course(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to enroll in course: {str(e)}",
-        )
-
-
-@router.get(
-    "/summary",
-    response_model=Dict[str, Any],
-    summary="Get course summary statistics",
-    description="Admin endpoint to retrieve aggregate course statistics",
-)
-async def get_course_summary(current_user: User = Depends(admin_required)):
-    """Return aggregated statistics for admin dashboards."""
-    try:
-        stats = await CourseService.get_course_statistics()
-        return {
-            "message": "Course summary retrieved successfully",
-            "data": stats,
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve course summary: {str(e)}",
         )
 
 

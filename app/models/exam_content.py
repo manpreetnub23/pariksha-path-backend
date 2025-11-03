@@ -20,7 +20,6 @@ class ExamContent(Document):
 
     exam_info_sections: List[ExamInfoSection] = Field(default_factory=list)
 
-    thumbnail_url: Optional[str] = None
     banner_url: Optional[str] = None
     is_active: bool = True
 

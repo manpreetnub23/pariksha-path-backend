@@ -26,7 +26,6 @@ class ExamContentIn(BaseModel):
     exam_code: str
     title: str
     description: Optional[str] = None
-    thumbnail_url: Optional[str] = None
     banner_url: Optional[str] = None
     exam_info_sections: List[ExamInfoSectionIn] = []
 
@@ -56,7 +55,6 @@ async def create_exam_content(
         exam_code=data.exam_code,
         title=data.title,
         description=data.description,
-        thumbnail_url=data.thumbnail_url,
         banner_url=data.banner_url,
         exam_info_sections=sections,
         created_at=datetime.now(timezone.utc),
@@ -112,7 +110,6 @@ async def update_exam_content(
 
     content.title = data.title
     content.description = data.description
-    content.thumbnail_url = data.thumbnail_url
     content.banner_url = data.banner_url
     content.exam_info_sections = [ExamInfoSection(**sec.dict()) for sec in data.exam_info_sections]
     content.updated_at = datetime.now(timezone.utc)

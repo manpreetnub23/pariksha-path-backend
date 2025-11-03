@@ -24,7 +24,6 @@ class CourseCreateRequest(BaseModel):
     mock_test_timer_seconds: int = 3600  # Timer duration in seconds for mock tests (default 1 hour)
     material_ids: List[str] = []
     test_series_ids: List[str] = []
-    thumbnail_url: str
     icon_url: Optional[str] = None
     priority_order: int = 0
     banner_url: Optional[str] = None
@@ -45,7 +44,6 @@ class CourseCreateRequest(BaseModel):
                 "validity_period_days": 365,
                 "material_ids": [],
                 "test_series_ids": [],
-                "thumbnail_url": "https://example.com/images/jee-physics.jpg",
                 "icon_url": "https://example.com/icons/physics.png",
                 "priority_order": 1,
                 "banner_url": "https://example.com/banners/jee-physics-banner.jpg",
@@ -68,7 +66,6 @@ class CourseUpdateRequest(BaseModel):
     test_series_ids: Optional[List[str]] = None
     validity_period_days: Optional[int] = None  # Number of days course access is valid after enrollment
     mock_test_timer_seconds: Optional[int] = None  # Timer duration in seconds for mock tests
-    thumbnail_url: Optional[str] = None
     icon_url: Optional[str] = None
     priority_order: Optional[int] = None
     banner_url: Optional[str] = None
@@ -111,7 +108,6 @@ class CourseResponse(BaseModel):
     material_ids: List[str]
     test_series_ids: List[str]
     enrolled_students_count: int
-    thumbnail_url: str
     icon_url: Optional[str] = None
     banner_url: Optional[str] = None
     tagline: Optional[str] = None

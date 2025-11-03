@@ -26,7 +26,6 @@ class StudyMaterial(BaseDocument):
     file_url: str
     file_size_kb: int
     preview_url: Optional[str] = None  # For sample/preview
-    thumbnail_url: Optional[str] = None
 
     # Classification
     access_type: MaterialAccessType = MaterialAccessType.PREMIUM
