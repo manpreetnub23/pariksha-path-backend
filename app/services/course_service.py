@@ -5,6 +5,7 @@ Course service for course management operations
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timedelta
 from bson import ObjectId
+import re
 
 from ..models.course import Course, Section
 from ..models.question import Question
@@ -241,7 +242,18 @@ class CourseService:
         Returns:
             Dictionary with course details
         """
-        course = await Course.get(course_id)
+        # Try by ObjectId first; if invalid or not found, try by code (case-insensitive)
+        course = None
+        try:
+            course = await Course.get(course_id)
+        except Exception:
+            course = None
+
+        if not course:
+            # Fallback: treat input as course code (case-insensitive exact match)
+            code_regex = {"$regex": f"^{re.escape(course_id)}$", "$options": "i"}
+            course = await Course.find_one({"code": code_regex})
+
         if not course:
             raise ValueError("Course not found")
 

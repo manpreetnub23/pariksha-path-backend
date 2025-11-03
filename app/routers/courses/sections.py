@@ -19,6 +19,70 @@ from fastapi import UploadFile, File, Form, Body
 router = APIRouter(prefix="/api/v1/courses", tags=["Courses - Sections"])
 
 
+
+
+@router.put(
+    "/{course_id}/sections/{section_name}",
+    response_model=Dict[str, Any],
+    summary="Update section name",
+    description="Admin endpoint to rename a section in a course",
+)
+async def update_section_in_course(
+    course_id: str,
+    section_name: str,
+    section_data: SectionUpdateRequest,
+    current_user: User = Depends(admin_required),
+):
+    """Update a section name in a course (Admin only)"""
+    try:
+        result = await SectionService.update_section_in_course(
+            course_id, section_name, section_data.new_section_name, current_user
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update section: {str(e)}",
+        )
+
+
+@router.post(
+    "/upload-questions",
+    response_model=Dict[str, Any],
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload questions to a course section",
+    description="Upload questions to a specific section in a course via CSV",
+)
+async def upload_questions_to_section(
+    file: UploadFile = File(...),
+    course_id: str = Form(...),
+    section: str = Form(...),
+    current_user: User = Depends(admin_required),
+):
+    """Upload questions to a specific section in a course"""
+    try:
+        contents = await file.read()
+        result = await CourseQuestionService.upload_questions_to_section(
+            course_id, section, contents, current_user
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload questions: {str(e)}",
+        )
+
+
 @router.post(
     "/{course_id}/sections",
     response_model=Dict[str, Any],
@@ -51,35 +115,6 @@ async def add_section_to_course(
             detail=f"Failed to add section: {str(e)}",
         )
 
-
-@router.put(
-    "/{course_id}/sections/{section_name}",
-    response_model=Dict[str, Any],
-    summary="Update section name",
-    description="Admin endpoint to rename a section in a course",
-)
-async def update_section_in_course(
-    course_id: str,
-    section_name: str,
-    section_data: SectionUpdateRequest,
-    current_user: User = Depends(admin_required),
-):
-    """Update a section name in a course (Admin only)"""
-    try:
-        result = await SectionService.update_section_in_course(
-            course_id, section_name, section_data.new_section_name, current_user
-        )
-        return result
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update section: {str(e)}",
-        )
 
 
 @router.delete(
@@ -196,37 +231,6 @@ async def update_section_question_count(
             detail=f"Failed to update question count: {str(e)}",
         )
 
-
-@router.post(
-    "/upload-questions",
-    response_model=Dict[str, Any],
-    status_code=status.HTTP_201_CREATED,
-    summary="Upload questions to a course section",
-    description="Upload questions to a specific section in a course via CSV",
-)
-async def upload_questions_to_section(
-    file: UploadFile = File(...),
-    course_id: str = Form(...),
-    section: str = Form(...),
-    current_user: User = Depends(admin_required),
-):
-    """Upload questions to a specific section in a course"""
-    try:
-        contents = await file.read()
-        result = await CourseQuestionService.upload_questions_to_section(
-            course_id, section, contents, current_user
-        )
-        return result
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to upload questions: {str(e)}",
-        )
 
 
 @router.get(
