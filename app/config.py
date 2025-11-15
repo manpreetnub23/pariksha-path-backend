@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int
 
     # Email configuration - Updated for Resend
-    SMTP_SERVER: str = "smtp.resend.com"
-    SMTP_PORT: int = 587  # Use 587 for STARTTLS (Resend recommended)
+    SMTP_SERVER: str = "smtp.hostinger.com"
+    SMTP_PORT: int = 465  # Use 587 for STARTTLS (Resend recommended)
     SENDER_EMAIL: str | None = None  # This will be your verified domain email
     SENDER_PASSWORD: str | None = None  # This will be your Resend API key
 
