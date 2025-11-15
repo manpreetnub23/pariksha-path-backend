@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, BackgroundTasks
 from fastapi.security import HTTPBearer
 import jwt
 from passlib.context import CryptContext
@@ -10,6 +10,7 @@ from .models.enums import UserRole, ExamCategory
 from .config import settings
 from typing import Dict, Any
 import os
+import logging
 
 # import secrets
 from .services.otp_service import OTPService
@@ -17,6 +18,9 @@ from .services.email_service import EmailService
 from .db import init_beanie_if_needed  # Import the new function
 
 import re
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -182,27 +186,22 @@ class AuthService:
     async def authenticate_user(email: str, password: str) -> Optional[User]:
         """Authenticate user with email and password"""
         try:
-            # CRITICAL: Ensure database is initialized BEFORE any database operation
-            print("🔄 Initializing database before authentication...")
+            # Ensure database is initialized BEFORE any database operation
             await init_beanie_if_needed()
-            print("✅ Database initialization completed")
 
-            print(f"Attempting to authenticate user: {email}")
             user = await User.find_one({"email": email})
-            print(f"Database query completed, user found: {user is not None}")
 
             if not user:
                 return None
 
             password_valid = AuthService.verify_password(password, user.password_hash)
-            print(f"Password verification result: {password_valid}")
 
             if not password_valid:
                 return None
 
             return user
         except Exception as e:
-            print(f"Authentication error: {str(e)}")
+            logger.error(f"Authentication error: {str(e)}")
             # Re-raise to be handled by the caller
             raise
 
@@ -230,26 +229,42 @@ class AuthService:
         return token_data
 
     @staticmethod
-    async def generate_and_send_otp(email: str) -> bool:
+    async def generate_and_send_otp(
+        email: str, 
+        background_tasks: Optional[BackgroundTasks] = None,
+        sync_send: bool = True  # NEW: Force synchronous sending for critical flows
+    ) -> bool:
         """Generate OTP and send verification email"""
         # Ensure database is initialized
         await init_beanie_if_needed()
 
         user = await User.find_one({"email": email})
         if not user:
+            logger.warning(f"User not found for OTP generation: {email}")
             return False
 
         # Generate OTP
         otp = OTPService.generate_otp()
         expiry = OTPService.generate_otp_expiry()
+        logger.info(f"📧 Generated OTP for {email}: {otp}")
 
-        # Update user with OTP
+        # Update user with OTP (fast DB operation)
         user.email_verification_otp = otp
         user.email_verification_otp_expires_at = expiry
         await user.save()
+        logger.info(f"✅ OTP stored in database for {email}")
 
-        # Send email
-        return await EmailService.send_verification_email(email, otp)
+        # ✅ SEND EMAIL SYNCHRONOUSLY (await) - Don't rely on BackgroundTasks
+        # This ensures email is sent before response is returned
+        logger.info(f"📨 Sending OTP email to {email} (synchronously)...")
+        result = await EmailService.send_verification_email(email, otp)
+        
+        if result:
+            logger.info(f"✅ OTP email sent successfully to {email}")
+        else:
+            logger.error(f"❌ Failed to send OTP email to {email}")
+        
+        return result
 
     @staticmethod
     async def verify_email_otp(email: str, otp: str) -> bool:
@@ -261,19 +276,24 @@ class AuthService:
         if not user:
             return False
 
-        # Check if OTP matches and is not expired
-        if user.email_verification_otp == otp and not OTPService.is_otp_expired(
-            user.email_verification_otp_expires_at
-        ):
+        # Check if OTP exists
+        if not user.email_verification_otp:
+            return False
 
-            # Mark email as verified and clear OTP
-            user.is_email_verified = True
-            user.email_verification_otp = None
-            user.email_verification_otp_expires_at = None
-            await user.save()
-            return True
+        # Check if OTP expired (using proper method that handles timezone issues)
+        if OTPService.is_otp_expired(user.email_verification_otp_expires_at):
+            return False
 
-        return False
+        # Check if OTP matches
+        if user.email_verification_otp != otp:
+            return False
+
+        # Mark email as verified and clear OTP
+        user.is_verified = True
+        user.email_verification_otp = None
+        user.email_verification_otp_expires_at = None
+        await user.save()
+        return True
 
     @staticmethod
     async def get_current_user(token: str) -> User:
@@ -299,7 +319,10 @@ class AuthService:
         return user
 
     @staticmethod
-    async def register_user(user_data: UserRegisterRequest) -> User:
+    async def register_user(
+        user_data: UserRegisterRequest,
+        background_tasks: Optional[BackgroundTasks] = None
+    ) -> User:
         """Register a new user"""
         # Ensure database is initialized
         await init_beanie_if_needed()
@@ -350,10 +373,20 @@ class AuthService:
         )
 
         await new_user.insert()
+
+        # Send welcome email (don't wait for it - use background tasks)
+        if background_tasks:
+            background_tasks.add_task(
+                EmailService.send_welcome_email, new_user.email, new_user.name
+            )
+
         return new_user
 
     @staticmethod
-    async def login_user(login_data: UserLoginRequest) -> tuple[User, Token]:
+    async def login_user(
+        login_data: UserLoginRequest,
+        background_tasks: Optional[BackgroundTasks] = None
+    ) -> tuple[User, Token]:
         """Login user and return tokens"""
         # Ensure database is initialized
         await init_beanie_if_needed()
@@ -375,10 +408,16 @@ class AuthService:
                 detail="Account is deactivated. Please contact admin.",
             )
 
-        # Update last login
-        user.last_login = datetime.now(timezone.utc)
-        user.update_timestamp()
-        await user.save()
+        # ✅ Update last login in background (non-blocking)
+        if background_tasks:
+            background_tasks.add_task(
+                AuthService._update_last_login, user.email
+            )
+        else:
+            # Fallback: update synchronously if no background_tasks
+            user.last_login = datetime.now(timezone.utc)
+            user.update_timestamp()
+            await user.save()
 
         # Create tokens
         access_token = AuthService.create_access_token(data={"sub": user.email})
@@ -392,6 +431,19 @@ class AuthService:
         )
 
         return user, token
+
+    @staticmethod
+    async def _update_last_login(email: str) -> None:
+        """Helper to update last login timestamp in background"""
+        try:
+            await init_beanie_if_needed()
+            user = await User.find_one({"email": email})
+            if user:
+                user.last_login = datetime.now(timezone.utc)
+                user.update_timestamp()
+                await user.save()
+        except Exception as e:
+            logger.warning(f"Failed to update last login for {email}: {str(e)}")
 
     @staticmethod
     def convert_user_to_response(user: User) -> UserResponse:

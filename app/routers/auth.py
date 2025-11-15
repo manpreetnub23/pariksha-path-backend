@@ -51,25 +51,15 @@ async def register(user_data: UserRegisterRequest, background_tasks: BackgroundT
         # Sanitize user input
         sanitized_data = sanitizer.sanitize_dict(user_data.dict())
 
+        # Do not use background_tasks for OTP email
         new_user = await AuthService.register_user(
-            UserRegisterRequest(**sanitized_data)
+            UserRegisterRequest(**sanitized_data),
+            None
         )
+
         user_response = AuthService.convert_user_to_response(new_user)
-
-        # Generate and send verification OTP in background
-        otp = OTPService.generate_otp()
-        expiry = OTPService.generate_otp_expiry()
-        new_user.email_verification_otp = otp
-        new_user.email_verification_otp_expires_at = expiry
-        await new_user.save()
-
-        # Send emails in background to improve response time
-        background_tasks.add_task(
-            EmailService.send_welcome_email, new_user.email, new_user.name
-        )
-        background_tasks.add_task(
-            EmailService.send_verification_email, new_user.email, otp
-        )
+        # Generate and send verification OTP synchronously
+        await AuthService.generate_and_send_otp(new_user.email, background_tasks=None, sync_send=True)
 
         return {
             "message": "User registered successfully",
@@ -98,6 +88,7 @@ async def register(user_data: UserRegisterRequest, background_tasks: BackgroundT
 )
 async def login(
     request_data: UserLoginRequest,
+    background_tasks: BackgroundTasks,
     request: Request = None,
 ):
     """
@@ -149,15 +140,14 @@ async def login(
             user.login_otp_expires_at = expiry
             await user.save()
 
-            # Send OTP email
-            success = await EmailService.send_login_otp_email(user.email, otp)
-            if not success:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to send verification email",
-                )
+            # Send OTP email synchronously (never use background_tasks)
+            logger.info(f"📧 Sending login OTP to {user.email}...")
+            email_sent = await EmailService.send_login_otp_email(user.email, otp)
+            if email_sent:
+                logger.info(f"✅ Login OTP email sent to {user.email}")
+            else:
+                logger.error(f"❌ Failed to send login OTP email to {user.email}")
 
-            # Return response indicating OTP verification is required
             return LoginResponse(
                 message="Login requires verification",
                 requires_verification=True,
@@ -354,6 +344,7 @@ async def refresh_access_token(
 )
 async def send_verification_email(
     request_data: dict,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
 ):
     """Send verification email with OTP"""
@@ -364,18 +355,8 @@ async def send_verification_email(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required"
             )
 
-        # Generate OTP
-        otp = OTPService.generate_otp()
-        expiry = OTPService.generate_otp_expiry()
-
-        # Update user with OTP
-        current_user.email_verification_otp = otp
-        current_user.email_verification_otp_expires_at = expiry
-        await current_user.save()
-
-        # Send email
-        success = await EmailService.send_verification_email(email, otp)
-
+        # Always send OTP synchronously (never use background_tasks)
+        success = await AuthService.generate_and_send_otp(email, background_tasks=None, sync_send=True)
         if success:
             return {
                 "message": "Verification email sent successfully",
@@ -383,8 +364,8 @@ async def send_verification_email(
             }
         else:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to send verification email",
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
             )
 
     except HTTPException as e:
@@ -650,7 +631,10 @@ async def verify_registration_email(
     response_model=Dict[str, str],
     summary="Resend OTP for email verification",
 )
-async def resend_verification_email(request_data: dict):
+async def resend_verification_email(
+    request_data: dict,
+    background_tasks: BackgroundTasks,
+):
     """
     Resend OTP to user's email for verification.
     """
@@ -661,26 +645,17 @@ async def resend_verification_email(request_data: dict):
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required"
             )
 
-        user = await User.find_one({"email": email})
-        if not user:
+        # Always send OTP synchronously (never use background_tasks)
+        success = await AuthService.generate_and_send_otp(email, background_tasks=None, sync_send=True)
+        if success:
+            return {
+                "message": "Verification email resent successfully",
+                "note": "Check your email for the OTP code",
+            }
+        else:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
             )
-
-        # Generate OTP
-        otp = OTPService.generate_otp()
-        expiry = OTPService.generate_otp_expiry()
-        user.email_verification_otp = otp
-        user.email_verification_otp_expires_at = expiry
-        await user.save()
-
-        # Send OTP email
-        await EmailService.send_verification_email(email, otp)
-
-        return {
-            "message": "Verification email resent successfully",
-            "note": "Check your email for the OTP code",
-        }
 
     except HTTPException as e:
         raise e
@@ -852,7 +827,10 @@ async def logout(current_user: User = Depends(get_current_user)):
     summary="Request password reset",
     description="Request password reset OTP via email",
 )
-async def forgot_password(request_data: PasswordResetRequest):
+async def forgot_password(
+    request_data: PasswordResetRequest,
+    background_tasks: BackgroundTasks,
+):
     """
     Request a password reset by sending an OTP to the user's registered email.
 
@@ -871,8 +849,13 @@ async def forgot_password(request_data: PasswordResetRequest):
             user.reset_password_otp_expires_at = expiry
             await user.save()
 
-            # Send email with OTP
-            await EmailService.send_password_reset_email(request_data.email, otp)
+            # ✅ Send email SYNCHRONOUSLY (await) - Don't rely on BackgroundTasks
+            logger.info(f"📧 Sending password reset OTP to {request_data.email}...")
+            email_sent = await EmailService.send_password_reset_email(request_data.email, otp)
+            if email_sent:
+                logger.info(f"✅ Password reset email sent to {request_data.email}")
+            else:
+                logger.error(f"❌ Failed to send password reset email to {request_data.email}")
 
         # Always return success message for security (don't reveal if email exists)
         return {
