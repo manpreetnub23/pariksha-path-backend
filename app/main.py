@@ -84,10 +84,18 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
+ALLOWED_ORIGINS = [
+    "myparikshapath.in",
+    "https://myparikshapath.in",
+    "https://www.myparikshapath.in",
+    "https://pariksha-path2-0-git-manav-manpreetnub23s-projects.vercel.app",
+    "http://localhost:3000",
+]
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
