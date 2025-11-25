@@ -22,6 +22,7 @@ from .models.exam_content import ExamContent
 from .models.exam_category_structure import ExamCategoryStructure
 from .models.course_enrollment import CourseEnrollment
 from .models.contact import Contact
+from .models.banner import Banner
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -160,6 +161,7 @@ async def init_beanie_if_needed() -> None:
                     ExamCategoryStructure,
                     ExamContent,
                     Contact,
+                    Banner,
                 ],
                 allow_index_dropping=False,
             )

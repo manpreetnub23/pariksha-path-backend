@@ -341,3 +341,109 @@ class FileUploadService:
         except Exception as e:
             print(f"Failed to delete PDF {pdf_url}: {str(e)}")
             return False
+
+
+# manpreet ne add kiya
+
+    @staticmethod
+    async def upload_banner_image(file: UploadFile, name: str = "banner") -> str:
+        """
+        Upload banner image to DigitalOcean under /banner folder
+        """
+
+        try:
+            # Validate image
+            FileUploadService._validate_image(file)
+
+            # Read file
+            file_content = await file.read()
+
+            # Optimize image (optional)
+            optimized_content = FileUploadService._optimize_image(
+                file_content, max_width=1600
+            )
+
+            # Extension
+            file_extension = FileUploadService.ALLOWED_IMAGE_TYPES[file.content_type]
+
+            # Unique name
+            unique_id = str(uuid.uuid4())[:10]
+            file_path = f"banner/{name}_{unique_id}{file_extension}"
+
+            # Upload to DO
+            s3_client = FileUploadService._get_s3_client()
+            s3_client.put_object(
+                Bucket=settings.DO_SPACES_BUCKET,
+                Key=file_path,
+                Body=optimized_content,
+                ContentType=file.content_type,
+                ACL="public-read",
+            )
+
+            # Return public URL
+            if settings.DO_SPACES_CDN_ENDPOINT:
+                return f"{settings.DO_SPACES_CDN_ENDPOINT}/{file_path}"
+            else:
+                return f"{settings.DO_SPACES_ENDPOINT}/{settings.DO_SPACES_BUCKET}/{file_path}"
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to upload banner: {str(e)}",
+            )
+
+    @staticmethod
+    async def list_banners():
+        """
+        List all banner images from DigitalOcean Space inside /banner folder
+        """
+        try:
+            s3_client = FileUploadService._get_s3_client()
+
+            response = s3_client.list_objects_v2(
+                Bucket=settings.DO_SPACES_BUCKET,
+                Prefix="banner/"
+            )
+
+            contents = response.get("Contents", [])
+
+            banners = []
+            for item in contents:
+                key = item.get("Key")
+
+                # Skip folder itself
+                if key.endswith("/"):
+                    continue
+
+                if settings.DO_SPACES_CDN_ENDPOINT:
+                    url = f"{settings.DO_SPACES_CDN_ENDPOINT}/{key}"
+                else:
+                    url = f"{settings.DO_SPACES_ENDPOINT}/{settings.DO_SPACES_BUCKET}/{key}"
+
+                banners.append({
+                    "key": key,
+                    "url": url,
+                    "uploaded_at": item.get("LastModified")
+                })
+
+            return banners
+
+        except Exception as e:
+            raise Exception(f"Failed to list banners: {str(e)}")
+
+    @staticmethod
+    async def delete_banner(key: str):
+        try:
+            s3_client = FileUploadService._get_s3_client()
+
+            s3_client.delete_object(
+                Bucket=settings.DO_SPACES_BUCKET,
+                Key=key
+            )
+
+            return True
+
+        except Exception as e:
+            raise Exception(f"Failed to delete banner: {str(e)}")

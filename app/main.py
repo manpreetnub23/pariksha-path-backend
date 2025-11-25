@@ -25,6 +25,7 @@ from .routers.analytics import router as analytics_router
 from .routers.exam_content import router as examcontent_router
 from .routers.enrollment import router as enrollment_router
 from .routers.payment import router as payment_router
+from .routers.banner import router as banner_router
 from .middleware import (
     SecurityHeadersMiddleware,
     LoggingMiddleware,
@@ -176,6 +177,7 @@ app.include_router(contact_router)
 app.include_router(payment_router)
 app.include_router(enrollment_router)
 app.include_router(examcontent_router)
+app.include_router(banner_router)
 
 
 # Health check endpoints
